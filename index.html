@@ -123,6 +123,7 @@ svg text{fill:var(--mut);font-size:11px}
 <header>
   <div class="logo">찾아가는 세미나 <small>자동배정 · 시안</small></div>
   <div class="hr">
+    <span id="extChip" class="badge" style="cursor:pointer" onclick="go('staff')" title="담당자 기존 일정 연동 상태"></span>
     
     <select id="roleSel" onchange="setRole(this.value)"></select>
     <button class="btn" onclick="go('alarms')">🔔 알람 <span class="dot" id="bell">0</span></button>
@@ -133,6 +134,7 @@ svg text{fill:var(--mut);font-size:11px}
 <main>
   <section class="page" id="p-dashboard"></section>
   <section class="page" id="p-partners"></section>
+  <section class="page" id="p-setup"></section>
   <section class="page" id="p-mail"></section>
   <section class="page" id="p-noreply"></section>
   <section class="page" id="p-audit"></section>
@@ -236,7 +238,7 @@ function seed(){
     {id:'r3',name:'진성건설',contact:'이진성',phone:'010-5555-6666',people:6,address:'경기도 평택시 비전동 77',d1:'2026-12-08',d2:'2026-12-09',d3:'2026-12-10',at:'2026-10-13 08:03'},
     {id:'r4',name:'정원건설',contact:'최정원',phone:'010-7777-8888',people:2,address:'경기도 안산시 상록구 중앙로 5',d1:'2026-12-01',d2:'2026-12-18',d3:'2026-12-18',at:'2026-10-13 09:30'}];
   const st={v:3,seq:100,zones,staff,companies,events,seminars:[],declines:[],calls:[],alarms:[],inbox,respErrors:[],log:[],
-    settings:{buffer:15,sameCity:25,metroIntra:40,speed:50,hwySpeed:80,longTripMin:150,allowOvernight:false,departEarliest:360,returnLatest:1320,holidays:['2026-12-25','2027-01-01'],replyDeadline:'2026-10-20',duration:120,slots:[540,600,660,780,840,900,960],autoConfirm:false,autoReassign:true,autoAfterReply:true,sheetUrl:'',baseCity:L('수원')},audit:[],
+    settings:{buffer:15,sameCity:25,metroIntra:40,speed:50,hwySpeed:80,longTripMin:150,allowOvernight:false,departEarliest:360,returnLatest:1320,holidays:['2026-12-25','2027-01-01'],replyDeadline:'2026-10-20',duration:120,slots:[540,600,660,780,840,900,960],autoConfirm:false,autoReassign:true,autoAfterReply:true,sheetUrl:'',baseCity:L('수원'),extOn:true,extUrl:'',extMap:{}},audit:[],
     tpls:[{id:'t1',name:'최초 안내',subject:'2026 찾아가는 세미나 신청 안내 ({업체명})',body:'안녕하세요, {업체명} 담당자님.\n\n{지역} 지역 세미나 가능 기간은 {세미나기간} 입니다.\n아래 링크에서 주소와 희망일 1·2·3순위를 회신해 주세요.\n\n{신청링크}'},
           {id:'t2',name:'리마인드',subject:'[리마인드] 2026 찾아가는 세미나 신청 ({업체명})',body:'{업체명} 담당자님, 아직 회신이 없어 다시 안내드립니다.\n기간: {세미나기간}\n\n{신청링크}'},
           {id:'t3',name:'일정 확정 안내',subject:'세미나 일정 확정 안내 ({업체명})',body:'{업체명} 담당자님, 세미나 일정이 확정되었습니다.\n일시: {세미나일자} {세미나시간}\n방문 담당자: {방문담당자}\n참석 인원: {참석인원}'},
@@ -269,11 +271,12 @@ function check(cand,st,base){
   if(cand.fixed&&cand.fixed!==st.id)R.push('지정 담당자 조건');
   const sem=base.filter(s=>s.staffId===st.id&&s.date===cand.date&&s.companyId!==cand.companyId);
   if(sem.length>=st.max)R.push('하루 최대 '+st.max+'건');
-  const tl=[...S.events.filter(e=>e.staffId===st.id&&e.date===cand.date).map(e=>({start:e.start,end:e.end,city:e.city,title:e.title})),...sem.map(s=>({start:s.start,end:s.end,city:s.city,title:cname(s.companyId)}))];
+  const tl=[...evsFor(st.id,cand.date).map(e=>({start:e.start,end:e.end,city:e.city,title:e.title})),...sem.map(s=>({start:s.start,end:s.end,city:s.city,title:cname(s.companyId)}))];
   for(const e of tl)if(cand.start<e.end&&e.start<cand.end)R.push('시간 중복: '+e.title);
   const m0=cand.city?travelMin(st.base,cand.city):null,LT=S.settings.longTripMin;
   if(m0!=null&&m0>=LT){if(tl.length)R.push('장거리 출장일: 하루 1건·다른 일정 불가');if(cand.end+m0>S.settings.returnLatest){if(S.settings.allowOvernight)W.push('숙박 출장 필요 (당일 복귀 불가)');else R.push('당일 복귀 불가 (숙박 출장 필요)')}else W.push('장거리 출장 (편도 약 '+m0+'분)')}
   if(sem.some(s=>{const mm=travelMin(st.base,s.city);return mm!=null&&mm>=LT}))R.push('같은 날 장거리 출장 일정 있음');
+  if(extOn()&&!EXT.ok)W.push('기존 일정 연동 미확인 — 충돌 확인 필요');
   const prev=tl.filter(e=>e.end<=cand.start).sort((a,b)=>b.end-a.end)[0],next=tl.filter(e=>e.start>=cand.end).sort((a,b)=>a.start-b.start)[0];
   const leg=(a,b,aEnd,bStart,label)=>{
     if(!a||!b){W.push('위치 미입력 · 이동시간 확인 ('+label+')');return}
@@ -390,7 +393,7 @@ function closeUrgentGo(cid){$('urgent').classList.remove('show');go('partners');
 function openModal(t,h,big){$('mTitle').textContent=t;$('mBody').innerHTML=h;$('modalBox').classList.toggle('big',!!big);$('modal').classList.add('show')}
 function closeModal(){$('modal').classList.remove('show')}
 $('modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal()});
-const NAV=[['dashboard','대시보드','🏠',''],['mail','메일·회신','✉️','업무 진행'],['noreply','미회신 업체','📭','업무 진행'],['request','신청 접수','📝','업무 진행'],['schedule','배정 일정','📅','업무 진행'],['route','동선·이동시간','🧭','업무 진행'],['alarms','알람센터','🔔','업무 진행'],['partners','협력사 리스트','🏢','관리'],['staff','담당자 관리','👤','관리'],['stats','통계·이력','📊','분석·설정'],['audit','수정내역','🧾','분석·설정'],['settings','설정','⚙️','분석·설정']];
+const NAV=[['dashboard','대시보드','🏠',''],['setup','연동 체크리스트','✅',''],['mail','메일·회신','✉️','업무 진행'],['noreply','미회신 업체','📭','업무 진행'],['request','신청 접수','📝','업무 진행'],['schedule','배정 일정','📅','업무 진행'],['route','동선·이동시간','🧭','업무 진행'],['alarms','알람센터','🔔','업무 진행'],['partners','협력사 리스트','🏢','관리'],['staff','담당자 관리','👤','관리'],['stats','통계·이력','📊','분석·설정'],['audit','수정내역','🧾','분석·설정'],['settings','설정','⚙️','분석·설정']];
 const STAFF_NAV=['schedule','route','alarms'];
 function go(p){page=p;renderAll();window.scrollTo(0,0)}
 function setRole(r){role=r;if(role!=='admin'&&!STAFF_NAV.includes(page))page='schedule';renderAll()}
@@ -403,7 +406,7 @@ function renderNav(){
   $('roleSel').innerHTML='<option value="admin">관리자 화면</option>'+S.staff.map(s=>`<option value="${s.id}" ${role===s.id?'selected':''}>담당자 화면 · ${esc(s.name)}</option>`).join('');
   $('roleSel').value=role;$('bell').textContent=unread()+openCalls().length;
 }
-const R={noreply:rNoReply,audit:rAudit,dashboard:rDash,partners:rPartners,mail:rMail,request:rRequest,schedule:rSchedule,route:rRoute,staff:rStaff,alarms:rAlarms,stats:rStats,settings:rSettings};
+const R={setup:rSetup,noreply:rNoReply,audit:rAudit,dashboard:rDash,partners:rPartners,mail:rMail,request:rRequest,schedule:rSchedule,route:rRoute,staff:rStaff,alarms:rAlarms,stats:rStats,settings:rSettings};
 function renderAll(){
   save();renderNav();document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id==='p-'+page));
   R[page]();
@@ -423,6 +426,7 @@ function rDash(){
   const steps=[['① 메일 발송',nSent,'대상 '+cs.length+'곳',nSent/Math.max(1,cs.length)],['② 회신',nRep,'발송 대비 '+pct(nRep,nSent),nRep/Math.max(1,nSent)],['③ 배정',nAsg,'회신 대비 '+pct(nAsg,nRep),nAsg/Math.max(1,nRep)],['④ 확정',nConf,'배정 대비 '+pct(nConf,nAsg),nConf/Math.max(1,nAsg)],['⑤ 진행 완료',nDone,'확정 대비 '+pct(nDone,nConf),nDone/Math.max(1,nConf)]];
   const up=S.seminars.filter(s=>['confirmed','proposed'].includes(s.status)).sort((a,b)=>a.date.localeCompare(b.date)||a.start-b.start).slice(0,8);
   $('p-dashboard').innerHTML=`<div class="title-row"><div><h1>세미나 운영 현황</h1><div class="desc">메일 발송부터 배정·확정까지 진행 상황과 지금 처리할 일을 한눈에 봅니다.</div></div><div class="row"><button class="btn" onclick="go('mail')">회신 확인</button><button class="btn pri" onclick="autoAssign();renderAll()">전체 자동배정</button></div></div>
+  ${setupHtml()}
   ${stickyHtml()}
   ${tasks.length?`<div class="tasks">${tasks.map(t=>`<button class="task ${t[2]}" onclick="${t[3]}"><b>${t[0]}</b><span>${t[1]}</span></button>`).join('')}</div>`:'<div class="allclear">✓ 지금 처리할 일이 없습니다.</div>'}
   <div class="panel"><div class="ph">진행 단계 <span class="sub">올해 대상 ${cs.length}곳 기준</span></div><div class="steps">${steps.map(s=>`<div class="step"><small>${s[0]}</small><strong>${s[1]}</strong><em>${s[2]}</em><div class="meter"><i style="width:${Math.min(100,Math.round(s[3]*100))}%"></i></div></div>`).join('')}</div></div>
@@ -561,7 +565,7 @@ function rSchedule(){
   if(!ui.week)ui.week=mondayOf(first);
   const days=[0,1,2,3,4].map(i=>addDays(ui.week,i));
   const sems=S.seminars.filter(s=>!['cancelled'].includes(s.status)&&(who==='all'||s.staffId===who));
-  const evs=S.events.filter(e=>who==='all'||e.staffId===who);
+  const evs=allEvents().filter(e=>who==='all'||e.staffId===who);
   const staffPick=mine?`<b>${esc(sname(mine))}</b> 님의 일정`:`<select onchange="ui.viewStaff=this.value;rSchedule()"><option value="all">전체 담당자</option>${S.staff.map(p=>`<option value="${p.id}" ${who===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select>`;
   const miss=S.companies.filter(c=>!c.x&&['회신완료(미배정)','연락필요'].includes(statusOf(c)));
   $('p-schedule').innerHTML=`<div class="title-row"><div><h1>배정 일정</h1><div class="desc">카드를 누르면 상세·확정·담당자 불가 표시·대타 찾기. 회색 카드는 연동된 기존 일정(샘플)입니다.</div></div>${role==='admin'?'<button class="btn pri" onclick="autoAssign();renderAll()">자동배정 다시 계산</button>':''}</div>
@@ -606,7 +610,7 @@ function rRoute(){
   const dates=[...new Set(S.seminars.filter(s=>s.staffId===sid&&['proposed','confirmed'].includes(s.status)).map(s=>s.date))].sort();
   const date=ui.routeDate&&dates.includes(ui.routeDate)?ui.routeDate:dates[0]||'';
   const p=S.staff.find(x=>x.id===sid);
-  const items=date?[...S.events.filter(e=>e.staffId===sid&&e.date===date).map(e=>({start:e.start,end:e.end,city:e.city,title:e.title+' (기존)',old:1})),...S.seminars.filter(s=>s.staffId===sid&&s.date===date&&['proposed','confirmed'].includes(s.status)).map(s=>({start:s.start,end:s.end,city:s.city,title:cname(s.companyId)}))].sort((a,b)=>a.start-b.start):[];
+  const items=date?[...evsFor(sid,date).map(e=>({start:e.start,end:e.end,city:e.city,title:e.title+' (기존)',old:1})),...S.seminars.filter(s=>s.staffId===sid&&s.date===date&&['proposed','confirmed'].includes(s.status)).map(s=>({start:s.start,end:s.end,city:s.city,title:cname(s.companyId)}))].sort((a,b)=>a.start-b.start):[];
   const pts=[{city:p.base,title:'출발지'},...items.filter(i=>i.city)].filter(q=>coord(q.city));
   const X=c=>20+((coord(c)[1]-125.9)/4.1)*600,Y=c=>20+((38.6-coord(c)[0])/5.6)*400;
   let rows='',prev=p.base;
@@ -623,8 +627,8 @@ function rRoute(){
 /* ---------- 담당자 ---------- */
 function rStaff(){
   const dc=id=>S.declines.filter(d=>d.staffId===id&&!d.revoked).length;
-  $('p-staff').innerHTML=`<div class="title-row"><div><h1>담당자 관리</h1><div class="desc">이름·출발지·하루 최대 건수·불가일을 관리합니다. 기존 일정은 연동 전이라 직접 입력/샘플입니다.</div></div><button class="btn" onclick="addStaff()">+ 담당자 추가</button></div>
-  <div class="notice">기존 일정 DB(하이웍스 등) 연동 상태: <span class="badge b-warn">연결 전</span> — 연동되면 아래 '기존 일정'이 자동으로 채워지고 배정 검사에 쓰입니다.</div>
+  $('p-staff').innerHTML=`<div class="title-row"><div><h1>담당자 관리</h1><div class="desc">이름·출발지·하루 최대 건수·불가일을 관리합니다. 기존 일정은 아래 연동으로 자동으로 들어오고, 연동되지 않는 일정은 직접 입력할 수 있습니다.</div></div><button class="btn" onclick="addStaff()">+ 담당자 추가</button></div>
+  ${extPanelHtml()}
   <div class="panel"><div class="tw"><table><tr><th>이름</th><th>출발지(지역)</th><th>하루 최대</th><th>사용</th><th>불가일</th><th>불가 표시 횟수</th></tr>${S.staff.map(p=>`<tr><td><input value="${esc(p.name)}" onchange="S.staff.find(x=>x.id=='${p.id}').name=this.value;save()"></td><td><select onchange="S.staff.find(x=>x.id=='${p.id}').base=this.value;save()">${Object.keys(GEO).sort().map(c=>`<option ${c===p.base?'selected':''}>${c}</option>`).join('')}</select></td><td><input type="number" min="1" max="5" style="width:60px" value="${p.max}" onchange="S.staff.find(x=>x.id=='${p.id}').max=+this.value||2;save()"></td><td><input type="checkbox" ${p.active?'checked':''} onchange="S.staff.find(x=>x.id=='${p.id}').active=this.checked;save()"></td><td>${p.off.map(o=>fmtD(o.date)+' '+esc(o.reason)).join('<br>')||'-'}</td><td>${dc(p.id)}</td></tr>`).join('')}</table></div></div>
   <div class="panel"><div class="ph">기존 일정 추가</div><div class="pb"><div class="row"><select id="eS">${S.staff.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select><input type="date" id="eD"><input type="time" id="eA" value="09:00"><input type="time" id="eB" value="12:00"><input id="eT" placeholder="일정 이름"><select id="eC"><option value="">위치 없음</option>${Object.keys(GEO).sort().map(c=>`<option>${c}</option>`).join('')}</select><button class="btn pri" onclick="addEv()">추가</button></div></div>
    <div class="tw"><table><tr><th>담당자</th><th>날짜</th><th>시간</th><th>일정</th><th>위치</th><th></th></tr>${[...S.events].sort((a,b)=>a.date.localeCompare(b.date)).map(e=>`<tr><td>${esc(sname(e.staffId))}</td><td>${fmtD(e.date)}</td><td>${fmtT(e.start)}–${fmtT(e.end)}</td><td>${esc(e.title)}</td><td>${esc(e.city||'-')}</td><td><button class="btn sm bad" onclick="S.events=S.events.filter(x=>x.id!='${e.id}');renderAll()">삭제</button></td></tr>`).join('')}</table></div></div>
@@ -834,7 +838,7 @@ function manualAssign(cid,staffId,date,start){
 function dayRoute(date){
   const who=role!=='admin'?role:(ui.viewStaff!=='all'?ui.viewStaff:'all');
   const routes=S.staff.filter(p=>who==='all'||p.id===who).map((p,i)=>({p,color:ROUTE_COLORS[S.staff.indexOf(p)%ROUTE_COLORS.length],items:[
-    ...S.events.filter(e=>e.staffId===p.id&&e.date===date).map(e=>({start:e.start,end:e.end,city:e.city,title:e.title+' (기존)',old:1})),
+    ...evsFor(p.id,date).map(e=>({start:e.start,end:e.end,city:e.city,title:e.title+' (기존)',old:1})),
     ...S.seminars.filter(s=>s.staffId===p.id&&s.date===date&&['proposed','confirmed','done'].includes(s.status)).map(s=>({start:s.start,end:s.end,city:s.city,title:cname(s.companyId),st:s.status}))].sort((a,b)=>a.start-b.start)})).filter(r=>r.items.length);
   const pts=[];routes.forEach(r=>{if(coord(r.p.base))pts.push(coord(r.p.base));r.items.forEach(i=>{if(i.city&&coord(i.city))pts.push(coord(i.city))})});
   let svg='<div class="sub">이 날 동선이 없습니다.</div>';
@@ -856,7 +860,151 @@ function dayRoute(date){
 }
 
 
-S=load();resnap();renderAll();if(openCalls().length)showUrgent();sticky().forEach(c=>toast('📞 연락처 없음: '+c.name+' — 입력 전까지 계속 알립니다'));
+/* ---------- 연동·준비 체크리스트 ---------- */
+function setupItems(){
+  const real=S.companies.filter(c=>String(c.id).startsWith('NF-')).length>=100;
+  return [
+   {g:'A',k:'a1',t:'업체 목록 불러오기 (CSV)',d:'협력사 리스트에서 [업체 목록 불러오기(CSV)] → 파싱한 MOU 업체 CSV 선택',tag:'앱 안에서',auto:real,go:"go('partners');importModalCo()",btn:'불러오기'},
+   {g:'A',k:'a2',t:'권역별 세미나 기간 실제 날짜 입력',d:'지금 값은 임의의 기본값입니다. 설정 → 권역별 세미나 기간',tag:'앱 안에서',go:"go('settings')",btn:'설정'},
+   {g:'A',k:'a3',t:'회신 마감일 정하기',d:'지나면 자동으로 "미회신" 처리됩니다. 기본값 2026-10-20은 임의의 값',tag:'앱 안에서',go:"go('settings')",btn:'설정'},
+   {g:'A',k:'a4',t:'담당자 이름·출발지·하루 최대 건수 확인',d:'출발지가 장거리 판단과 이동시간에 쓰입니다',tag:'앱 안에서',go:"go('staff')",btn:'담당자'},
+   {g:'A',k:'a5',t:'장거리·출장 규칙 확인',d:'장거리 기준 150분, 숙박 출장 허용 여부, 당일 복귀 시각',tag:'앱 안에서',go:"go('settings')",btn:'설정'},
+   {g:'A',k:'a6',t:'휴무일·공휴일 입력',d:'기본: 12/25, 1/1. 세미나 기간 안의 휴무일을 모두 넣으세요',tag:'앱 안에서',go:"go('settings')",btn:'설정'},
+   {g:'A',k:'a7',t:'연락처 없는 업체 연락처 입력 (지온산업·스타건설)',d:'입력 전까지 알람이 계속 뜹니다',tag:'앱 안에서',auto:S.companies.some(c=>c.alertPhone)&&sticky().length===0,go:"go('partners')",btn:'협력사'},
+   {g:'A',k:'a8',t:'메일 문구 확정 + 신청(구글폼) 링크 입력',d:'메일·회신 → 메일 양식 / 신청 링크',tag:'앱 안에서',go:"go('mail')",btn:'메일'},
+   {g:'A',k:'a9',t:'2025년 진행 업체·수주액 입력',d:'통계·이력 → 과거 업체 불러오기 (전환율 계산용)',tag:'앱 안에서',go:"go('stats')",btn:'통계'},
+   {g:'B',k:'b1',t:'구글폼 만들기 + 응답 구글시트 연결',d:'폼 항목: 시공사명 · 담당자명 · 연락처 · 참여 인원 · 사옥 주소 · 희망일 1·2·3순위. 시트 주소를 설정에 입력',tag:'외부 연동',go:"go('settings')",btn:'설정'},
+   {g:'B',k:'b2',t:'메일 실제 발송 연결',d:'발송 방식(Gmail 등)과 발신 계정을 정해야 합니다',tag:'외부 연동'},
+   {g:'A',k:'a10',t:'담당자 기존 일정 연동 (자동 동기화) 확인',d:'담당자 관리 화면 맨 위: 연결됨 표시와 읽은 일정 수 확인',tag:'앱 안에서',auto:EXT.ok&&EXT.last>0,go:"go('staff')",btn:'담당자'},
+   {g:'A',k:'a11',t:'연동 이름 ↔ 우리 담당자 연결 확인',d:'이름이 다르면 직접 연결해야 그 사람의 일정이 배정에 반영됩니다',tag:'앱 안에서',go:"go('staff')",btn:'담당자'},
+   {g:'B',k:'b4',t:'지도 API 연결 (실제 이동시간)',d:'네이버·카카오·구글 중 선택하고 API 키를 직접 발급해야 합니다',tag:'직접 해야 함'},
+   {g:'B',k:'b5',t:'공용 저장소·로그인',d:'여러 명이 같은 데이터를 보려면 필요합니다. 지금은 이 브라우저에만 저장됩니다',tag:'외부 연동'},
+   {g:'B',k:'b6',t:'고객관리카드(고유번호) 연동',d:'업체 정보를 고유번호 기준으로 읽기 연동',tag:'외부 연동'},
+   {g:'C',k:'c1',t:'GitHub에 index.html 올리기 + Pages 켜기',d:'저장소 tazan0068/seminar-scheduler-v2 · Settings → Pages → main',tag:'직접 해야 함'},
+   {g:'C',k:'c2',t:'실제 업체 정보를 쓰기 전에 저장소 Private 확인',d:'Public이면 누구나 앱을 볼 수 있습니다 (샘플 데이터만 있을 때는 괜찮음)',tag:'직접 해야 함'}
+  ];
+}
+function setupHtml(){
+  S.checklist=S.checklist||{};const it=setupItems(),done=x=>x.auto!==undefined?x.auto:!!S.checklist[x.k],n=it.filter(done).length;
+  const G={A:'① 지금 앱 안에서 바로 할 수 있는 것',B:'② 나중에 연동할 것',C:'③ 올리기·보안'};
+  const tagc={'앱 안에서':'b-pri','외부 연동':'b-warn','직접 해야 함':'b-bad'};
+  const open=ui.setupOpen!==false;
+  return `<details class="panel" ${open?'open':''} ontoggle="ui.setupOpen=this.open"><summary class="ph" style="cursor:pointer;list-style:none"><span>✅ 연동·준비 체크리스트 <span class="sub">${n} / ${it.length} 완료</span></span><span style="flex:1;max-width:260px"><div class="bar" style="margin:0"><i style="width:${Math.round(n/it.length*100)}%"></i><span>${Math.round(n/it.length*100)}%</span></div></span></summary><div class="pb">${['A','B','C'].map(g=>`<div style="font-weight:800;margin:${g==='A'?0:16}px 0 6px">${G[g]}</div>`+it.filter(x=>x.g===g).map(x=>`<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line);flex-wrap:nowrap;align-items:flex-start"><input type="checkbox" style="margin-top:4px" ${done(x)?'checked':''} ${x.auto!==undefined?'disabled title="자동으로 확인됩니다"':''} onchange="S.checklist['${x.k}']=this.checked;save();renderAll()"><div style="flex:1;min-width:0"><div style="font-weight:700;${done(x)?'text-decoration:line-through;color:var(--mut)':''}">${esc(x.t)} <span class="badge ${tagc[x.tag]||''}">${esc(x.tag)}</span>${x.auto!==undefined?' <span class="sub">자동 확인</span>':''}</div><div class="sub">${esc(x.d)}</div></div>${x.go?`<button class="btn sm" onclick="${x.go}">${esc(x.btn||'이동')} ›</button>`:''}</div>`).join('')).join('')}</div></details>`;
+}
+function rSetup(){$('p-setup').innerHTML=`<div class="title-row"><div><h1>연동 체크리스트</h1><div class="desc">운영을 시작하기 전에 준비하거나 연동해야 할 것을 한곳에 모았습니다. 완료하면 체크하세요(체크 상태는 이 브라우저에 저장됩니다).</div></div></div>${setupHtml()}`}
+
+
+/* ---------- 담당자 기존 일정 자동 연동 (읽기 전용) ---------- */
+const EXT={ok:false,last:0,error:'',busy:false,fail:0,events:[],users:[],idx:{},mapped:[],counts:{total:0,vac:0,unmatched:0},vacWarn:'',sig:''};
+const EXT_PATHS=['pt','briefing','personal','seminar','asq','vacation','meetings','sales'];
+const EXT_DEFAULT='https://test-168a4-default-rtdb.asia-southeast1.firebasedatabase.app';
+const extOn=()=>S.settings.extOn!==false;
+const extBase=()=>(S.settings.extUrl||EXT_DEFAULT).replace(/\/+$/,'');
+function xMin(s){const t=String(s==null?'':s).trim().replace(/시\s*/,':').replace(/분$/,'');const m=/^(\d{1,2})(?::(\d{2})?(?::\d{2})?)?$/.exec(t);return m&&+m[1]<24&&+(m[2]||0)<60?+m[1]*60+ +(m[2]||0):null}
+function xInterval(r){
+  const parts=String(r.time||'').split(/\s*[~～–-]\s*/),a=xMin(r.startTime||parts[0]),b=xMin(r.endTime||parts[1]);
+  if(r.allDay||/종일|출장|휴가|연차|반차/.test([r.type,r.title,r.siteName].join(' ')))return a!==null&&b!==null&&b>a?{start:a,end:b}:{start:0,end:1440,allDay:true};
+  if(a!==null&&b!==null&&b>a)return {start:a,end:b};
+  if(a!==null&&!r.endTime&&!parts[1]&&a+120<=1440)return {start:a,end:a+120,estEnd:true};
+  return {start:0,end:1440,unknown:true};
+}
+function xVac(r){
+  const parts=String(r.time||'').split(/\s*[~～–-]\s*/),a=xMin(r.start_time!=null?r.start_time:r.startTime!=null?r.startTime:parts[0]),b=xMin(r.end_time!=null?r.end_time:r.endTime!=null?r.endTime:parts[1]);
+  const title=[r.vacation_type_title,r.title,r.siteName,r.dayType,r.period].filter(Boolean).join(' ');
+  if(a!==null&&b!==null&&b>a&&!r.allDay)return {start:a,end:b};
+  if(r.type==='hours'||r.dayType==='hours')return {start:0,end:1440,unknown:true};
+  if(/오전|\bam\b/i.test(title))return {start:0,end:720};
+  if(/오후|\bpm\b/i.test(title))return {start:720,end:1440};
+  if(/반차/.test(title)||(Number(r.days)>0&&Number(r.days)<1))return {start:0,end:1440,unknown:true};
+  return {start:0,end:1440,allDay:true};
+}
+function xLabels(r){return [...new Set([r.assignee,r.ptAssignee,r.userName,...(Array.isArray(r.assignees)?r.assignees:[]),...(Array.isArray(r.attendees)?r.attendees:[])].filter(x=>typeof x==='string').flatMap(x=>x.split(/[\/,]/)).map(x=>x.trim()).filter(Boolean))]}
+function extNormalize(raw,hw){
+  const out=[],from=addDays(todayKST(),-30);
+  const add=(path,key,r,vac)=>{
+    if(!r||typeof r!=='object'||Array.isArray(r))return;
+    if(r.deleted||['취소','cancelled','canceled','deleted'].includes(r.status))return;
+    if(!dayOK(r.date)||r.date<from)return;
+    const iv=vac?xVac(r):xInterval(r),addr=r.address||r.location||'';
+    out.push({id:path+'/'+key,src:path,date:r.date,start:iv.start,end:iv.end,unknown:!!iv.unknown,estEnd:!!iv.estEnd,allDay:!!iv.allDay,vac:!!vac,names:xLabels(r),title:vac?'휴가':(r.siteName||r.title||r.company||'기존 업무'),city:locOf(addr),addr});
+  };
+  for(const p of EXT_PATHS){const d=raw[p];if(d==null)continue;if(typeof d!=='object'||Array.isArray(d))throw Error(p+': 응답 형식 오류');for(const [k,r] of Object.entries(d))add(p,k,r,p==='vacation')}
+  if(hw&&hw.data&&typeof hw.data==='object'&&!Array.isArray(hw.data)){
+    for(const rows of Object.values(hw.data)){if(!Array.isArray(rows))continue;
+      for(const r of rows){if(!r||!dayOK(r.date)||r.office_user_no==null)continue;
+        if(!['결재완료','결재중'].includes(r.approval_status))continue;
+        add('hiworks',r.office_user_no+'/'+r.date+'/'+r.start_time,{...r,assignee:r.user_name,status:r.approval_status},true)}}
+  }
+  return out;
+}
+function extStaffIds(e){return [...new Set(e.names.map(n=>(S.settings.extMap||{})[n]||(S.staff.find(p=>p.name===n)||{}).id).filter(Boolean))]}
+function extRebuild(){
+  EXT.idx={};EXT.mapped=[];let un=0,vac=0;
+  for(const e of EXT.events){const ids=extStaffIds(e);if(e.vac)vac++;if(!ids.length||!e.names.length){un++;continue}
+    for(const sid of ids){const o={id:e.id,staffId:sid,date:e.date,start:e.start,end:e.end,city:e.city,title:e.title,ext:true,vac:e.vac,unknown:e.unknown};EXT.mapped.push(o);(EXT.idx[sid+'|'+e.date]=EXT.idx[sid+'|'+e.date]||[]).push(o)}}
+  EXT.counts={total:EXT.events.length,vac,unmatched:un};
+}
+function evsFor(sid,date){return S.events.filter(e=>e.staffId===sid&&e.date===date).concat(EXT.idx[sid+'|'+date]||[])}
+function allEvents(){return S.events.concat(EXT.mapped)}
+async function extSync(){
+  if(!extOn()||EXT.busy)return;EXT.busy=true;extChip();
+  try{
+    const base=extBase(),get=async p=>{const r=await fetch(base+'/'+p,{cache:'no-store',signal:AbortSignal.timeout(20000)});if(!r.ok)throw Error('일정 조회 실패 ('+r.status+') '+p.split('.')[0]);return r.json()};
+    const names=await Promise.all(EXT_PATHS.map(p=>get(p+'.json')));const raw=Object.fromEntries(EXT_PATHS.map((p,i)=>[p,names[i]]));
+    let hw=null;EXT.vacWarn='';
+    try{const [d,m]=await Promise.all([get('hiworks_vacation_sync/data.json'),get('hiworks_vacation_sync/meta.json')]);hw={data:d,meta:m};const ls=Date.parse(m&&m.lastSync);if(!Number.isFinite(ls)||Date.now()-ls>36*3600000)EXT.vacWarn='하이웍스 휴가 수집이 36시간 넘게 갱신되지 않았습니다'}catch(e){EXT.vacWarn='하이웍스 휴가 조회 실패 — 휴가는 최신이 아닐 수 있습니다'}
+    let users=[];try{const ids=await get('users.json?shallow=true');users=(await Promise.all(Object.keys(ids||{}).map(async id=>{try{const n=await get('users/'+encodeURIComponent(id)+'/name.json');return typeof n==='string'?n.trim():''}catch(e){return ''}}))).filter(Boolean)}catch(e){}
+    const ev=extNormalize(raw,hw),sig=ev.map(e=>e.id+e.date+e.start+e.end+e.names.join()).sort().join('|');
+    const changed=sig!==EXT.sig;EXT.events=ev;EXT.users=[...new Set(users)];EXT.sig=sig;EXT.ok=true;EXT.last=Date.now();EXT.error='';EXT.fail=0;
+    extRebuild();try{localStorage.setItem('seminar-ext-cache',JSON.stringify({events:ev,users:EXT.users,last:EXT.last}))}catch(e){}
+    if(changed)extReact();
+  }catch(e){EXT.ok=false;EXT.error=e.message||String(e);EXT.fail++;if(EXT.fail===1||EXT.fail%30===0)addAlarm('warn','일정 연동 오류',EXT.error+' — 연동 일정 없이 배정하면 충돌을 놓칠 수 있습니다.')}
+  finally{EXT.busy=false;extChip();if(['staff','schedule','dashboard','route','setup'].includes(page)&&!/INPUT|TEXTAREA|SELECT/.test((document.activeElement||{}).tagName||''))renderAll()}
+}
+function extReact(){
+  let changedProposals=false;
+  if(S.seminars.some(s=>s.status==='proposed')){autoAssign(true);changedProposals=true}
+  S.extAlerted=S.extAlerted||{};let n=0;
+  for(const s of S.seminars.filter(x=>x.status==='confirmed')){const p=S.staff.find(x=>x.id===s.staffId);if(!p)continue;const r=check(s,p,liveSem().filter(x=>x.id!==s.id));
+    const bad=r.reasons.filter(x=>/시간 중복|이동시간 부족|불가일|장거리|도착 불가/.test(x));if(!bad.length)continue;
+    const key=s.id+'|'+bad.join('/');if(S.extAlerted[key])continue;S.extAlerted[key]=1;n++;
+    addAlarm('warn','연동 일정과 충돌: '+cname(s.companyId),sname(s.staffId)+' · '+fmtD(s.date)+' '+fmtT(s.start)+' — '+bad.join(' / ')+' → 배정 일정에서 [담당자 불가 표시]나 [대타 찾기]로 처리하세요.',{companyId:s.companyId,seminarId:s.id})}
+  logit('일정 연동 변경 반영'+(changedProposals?' (미확정 배정안 재계산)':'')+(n?' · 충돌 '+n+'건':''));
+}
+function extChip(){
+  const el=$('extChip');if(!el)return;
+  if(!extOn()){el.className='badge';el.textContent='일정 연동 꺼짐';return}
+  if(EXT.busy&&!EXT.last){el.className='badge b-pri';el.textContent='일정 연동 중…';return}
+  if(EXT.ok){el.className='badge b-ok';el.textContent='일정 연동 · '+new Date(EXT.last).toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Seoul'})+(EXT.vacWarn?' ⚠':'')}
+  else{el.className='badge b-bad';el.textContent=EXT.last?'일정 연동 오류 (이전 데이터 사용)':'일정 연동 오류'}
+}
+function extNames(){
+  const cnt={};EXT.events.forEach(e=>e.names.forEach(n=>cnt[n]=(cnt[n]||0)+1));EXT.users.forEach(n=>{if(!(n in cnt))cnt[n]=0});
+  return Object.entries(cnt).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
+}
+function extPanelHtml(){
+  const map=S.settings.extMap||{},rows=extNames(),on=extOn();
+  const st=!on?'<span class="badge">꺼짐</span>':EXT.ok?'<span class="badge b-ok">연결됨 · 자동 동기화</span>':EXT.busy?'<span class="badge b-pri">연결 중…</span>':'<span class="badge b-bad">오류</span>';
+  return `<div class="panel"><div class="ph">담당자 기존 일정 연동 ${st}<span class="sub">60초마다 자동으로 확인하고, 탭을 다시 열거나 인터넷이 다시 연결되면 바로 확인합니다 (읽기 전용)</span></div><div class="pb">
+   <div class="row" style="margin-bottom:10px"><label style="display:flex;gap:6px;margin:0;color:var(--ink)"><input type="checkbox" ${on?'checked':''} onchange="S.settings.extOn=this.checked;save();if(this.checked)extSync();renderAll()"> 자동 연동 켜기</label><input style="flex:1;min-width:260px" value="${esc(S.settings.extUrl||'')}" placeholder="${esc(EXT_DEFAULT)}" onchange="S.settings.extUrl=this.value.trim();EXT.last=0;EXT.sig='';extSync()"><button class="btn sm" onclick="extSync()">지금 확인</button></div>
+   <div class="sub">${EXT.last?'마지막 동기화 '+new Date(EXT.last).toLocaleString('ko-KR',{timeZone:'Asia/Seoul'})+' · ':''}읽은 일정 ${EXT.counts.total}건(휴가 ${EXT.counts.vac}건) · 담당자 연결 안 된 일정 ${EXT.counts.unmatched}건${EXT.error?' · <b style="color:var(--bad)">'+esc(EXT.error)+'</b>':''}${EXT.vacWarn?' · <b style="color:var(--warn)">'+esc(EXT.vacWarn)+'</b>':''}</div>
+   <h4>연동 이름 ↔ 담당자 연결</h4><div class="sub" style="margin-bottom:6px">이름이 같으면 자동 연결됩니다. 다르면 직접 골라 주세요. 연결되지 않은 일정은 배정 검사에 반영되지 않습니다.</div>
+   <div class="tw" style="max-height:320px"><table style="min-width:0"><tr><th>연동 시스템의 이름</th><th>일정 수</th><th>우리 담당자</th></tr>${rows.map(([n,c])=>{const auto=(S.staff.find(p=>p.name===n)||{}).id||'',cur=map[n]||auto;return `<tr><td>${esc(n)}</td><td>${c}</td><td><select onchange="extMapSet('${esc(n).replace(/'/g,'&#39;')}',this.value)"><option value="">연결 안 함</option>${S.staff.map(p=>`<option value="${p.id}" ${cur===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select>${cur&&!map[n]?' <span class="sub">자동</span>':''}${!cur?` <button class="btn sm" onclick="extAddStaff(this.dataset.n)" data-n="${esc(n)}">담당자로 추가</button>`:''}</td></tr>`}).join('')||'<tr><td colspan=3 class="sub">연동된 이름이 아직 없습니다.</td></tr>'}</table></div></div></div>`;
+}
+function extMapSet(n,v){S.settings.extMap=S.settings.extMap||{};if(v)S.settings.extMap[n]=v;else delete S.settings.extMap[n];extRebuild();extReact();renderAll()}
+function extAddStaff(n){const id='st'+Date.now();S.staff.push({id,name:n,base:S.settings.baseCity,max:2,active:true,off:[]});extRebuild();renderAll();toast(n+' 담당자를 추가했습니다 (출발지를 확인하세요)')}
+function extInit(){
+  S.settings.extMap=S.settings.extMap||{};
+  try{const c=JSON.parse(localStorage.getItem('seminar-ext-cache')||'null');if(c&&Array.isArray(c.events)){EXT.events=c.events;EXT.users=c.users||[];EXT.last=c.last||0;EXT.sig='';extRebuild()}}catch(e){}
+  extChip();extSync();
+  setInterval(extSync,60000);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)extSync()});
+  window.addEventListener('online',extSync);
+  window.addEventListener('offline',()=>{EXT.ok=false;EXT.error='인터넷 연결 없음';extChip()});
+}
+
+
+S=load();resnap();renderAll();extInit();if(openCalls().length)showUrgent();sticky().forEach(c=>toast('📞 연락처 없음: '+c.name+' — 입력 전까지 계속 알립니다'));
 </script>
 </body>
 </html>
