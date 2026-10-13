@@ -1,0 +1,1 @@
+# seminar-scheduler-v2
