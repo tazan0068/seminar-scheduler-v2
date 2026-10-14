@@ -450,10 +450,10 @@ function rPartners(){
   <div class="panel"><div class="ph"><div class="row"><input id="pq" placeholder="업체명·지역·고유번호" value="${esc(q)}" oninput="rPartners();$('pq').focus()">
    <select onchange="ui.rFilter=this.value;rPartners()"><option value="">전체 지역</option>${cities.map(c=>`<option ${rf===c?'selected':''}>${c}</option>`).join('')}</select>
    <select onchange="ui.stFilter=this.value;rPartners()">${[['','전체'],['hist','지난 시즌 참석한 업체'],['rejoin','지난 참석 → 올해도 참석'],['lost','지난 참석 → 올해 미참석'],['new','올해 신규 참석'],['inv','초청세미나 업체']].map(o=>`<option value="${o[0]}" ${fy===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></div><span class="sub">${list.length}곳</span></div>
-  <div class="tw"><table><tr><th>협력사</th><th>고유번호</th><th>지역</th><th>참석 이력</th><th>희망일 1·2·3</th><th>지정 담당자</th><th>올해 배정</th><th>상태</th><th></th></tr>
+  <div class="tw"><table><tr><th>협력사</th><th>고유번호</th><th>지역</th><th>참석 이력</th><th>희망일 1·2·3</th><th>지정 담당자</th><th>올해 배정</th><th>상태</th><th>비고</th><th></th></tr>
   ${list.map(c=>{const s=semOf(c);return `<tr><td style="cursor:pointer" onclick="companyModal('${c.id}')"><b>${esc(c.name)}</b><div class="sub">${esc(c.address)}</div></td><td>${c.id}</td><td>${esc(c.city)}</td><td>${attendCell(c)}</td><td>${c.prefs.map(d=>fmtD(d)).join('<br>')||'-'}</td>
   <td><select onchange="setFixed('${c.id}',this.value)" ${s&&s.status!=='proposed'?'disabled':''}><option value="">자동배정</option>${S.staff.map(p=>`<option value="${p.id}" ${c.fixedStaffId===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></td>
-  <td>${s?fmtD(s.date)+' '+fmtT(s.start)+'<br>'+esc(sname(s.staffId)):'-'}</td><td>${badge(statusOf(c))}</td><td>${c.x?`<button class="btn sm" onclick="setX('${c.id}',false)">진행 복원</button>`:`<button class="btn sm bad" onclick="setX('${c.id}',true)">진행 안 함</button>`}</td></tr>`}).join('')}</table></div></div>`;
+  <td>${s?fmtD(s.date)+' '+fmtT(s.start)+'<br>'+esc(sname(s.staffId)):'-'}</td><td>${badge(statusOf(c))}</td><td><input value="${esc(c.remark||'')}" placeholder="비고" style="min-width:150px" onchange="setRemark('${c.id}',this.value)"></td><td>${c.x?`<button class="btn sm" onclick="setX('${c.id}',false)">진행 복원</button>`:`<button class="btn sm bad" onclick="setX('${c.id}',true)">진행 안 함</button>`}</td></tr>`}).join('')}</table></div></div>`;
 }
 function setFixed(id,v){comp(id).fixedStaffId=v;S.seminars=S.seminars.filter(s=>!(s.companyId===id&&s.status==='proposed'));save();renderAll()}
 function setX(id,v){const c=comp(id);if(v&&S.seminars.some(s=>s.companyId===id&&s.status==='confirmed')&&!confirm('확정된 세미나가 있습니다. 진행 안 함 처리하면 확정이 취소됩니다. 계속할까요?'))return;c.x=v;if(v)S.seminars.forEach(s=>{if(s.companyId===id&&['proposed','confirmed'].includes(s.status))s.status='cancelled'});logit(c.name+(v?' 진행 안 함':' 진행 복원'));renderAll()}
@@ -482,7 +482,7 @@ function saveCompany(id){
 
 /* ---------- 메일·회신 ---------- */
 function periodText(city){const z=zoneFor(city);return z?z.start+' ~ '+z.end:'(기간 미설정)'}
-function fillTpl(s,c){const sem=c&&semOf(c);const m={'{업체명}':c?.name,'{지역}':c?.city,'{세미나기간}':c?periodText(c.city):null,'{세미나일자}':sem?fmtD(sem.date):null,'{세미나시간}':sem?fmtT(sem.start):null,'{방문담당자}':sem?sname(sem.staffId):null,'{참석인원}':c?c.people+'명':null,'{신청링크}':S.formLink};return Object.entries(m).reduce((v,[k,x])=>x?v.split(k).join(x):v,s||'')}
+function fillTpl(s,c){const sem=c&&semOf(c);const m={'{업체명}':c?.name,'{지역}':c?.city,'{세미나기간}':c?periodText(c.city):null,'{세미나일자}':sem?fmtD(sem.date):null,'{세미나시간}':sem?fmtT(sem.start):null,'{방문담당자}':sem?sname(sem.staffId):null,'{참석인원}':c?c.people+'명':null,'{신청링크}':S.formLink,'{회신마감일}':c?deadlineFor(c):null,'{신청항목}':formItemsText(c?zoneFor(c.city):null)};return Object.entries(m).reduce((v,[k,x])=>x?v.split(k).join(x):v,s||'')}
 function rMail(){
   const t=S.tpls.find(x=>x.id===ui.tplId)||S.tpls[0];ui.tplId=t.id;
   const zsel=ui.mailZone||'',unsent=S.companies.filter(c=>!c.mail.sent&&!c.x&&(!zsel||zoneFor(c.city)?.id===zsel));
@@ -499,7 +499,7 @@ function rMail(){
   <div class="panel"><div class="ph">메일 양식</div><div class="pb"><div class="row">${S.tpls.map(x=>`<button class="btn ${x.id===t.id?'pri':''}" onclick="ui.tplId='${x.id}';rMail()">${esc(x.name)}</button>`).join('')}<button class="btn" onclick="addTpl()">+ 추가</button></div>
    <div class="fg" style="margin-top:10px"><div><label>양식 이름</label><input id="tn" value="${esc(t.name)}"></div><div><label>미리보기 업체</label><select id="mailCo" onchange="rMail()">${S.companies.map(c=>`<option value="${c.id}" ${c.id===prevC.id?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div></div>
    <label style="margin-top:8px">제목</label><input id="ts" style="width:100%" value="${esc(t.subject)}"><label style="margin-top:8px">본문</label><textarea id="tb">${esc(t.body)}</textarea>
-   <div>${['{업체명}','{지역}','{세미나기간}','{세미나일자}','{세미나시간}','{방문담당자}','{참석인원}','{신청링크}'].map(k=>`<button class="tok" onclick="insTok('${k}')">${k}</button>`).join('')}</div>
+   <div>${['{업체명}','{지역}','{세미나기간}','{세미나일자}','{세미나시간}','{방문담당자}','{참석인원}','{신청링크}','{회신마감일}','{신청항목}'].map(k=>`<button class="tok" onclick="insTok('${k}')">${k}</button>`).join('')}</div>
    <div class="row" style="margin-top:8px"><button class="btn pri" onclick="saveTpl()">저장</button><button class="btn bad" onclick="delTpl()">삭제</button></div>
    <h4>미리보기</h4><div class="notice"><b>${esc(fillTpl(t.subject,prevC))}</b><pre style="white-space:pre-wrap;font:inherit;margin:6px 0 0">${esc(fillTpl(t.body,prevC))}</pre></div>
    <div><label>구글폼(신청) 링크</label><input style="width:100%" value="${esc(S.formLink)}" onchange="S.formLink=this.value;save()"></div></div></div>`;
@@ -543,7 +543,7 @@ function pasteResponses(){
 /* ---------- 신청 접수 ---------- */
 function rRequest(){
   $('p-request').innerHTML=`<div class="title-row"><div><h1>신청 접수 (직접 입력)</h1><div class="desc">구글폼 연동 전/예외 접수용입니다. 주소로 지역을 인식하고 해당 권역 기간을 검사합니다.</div></div></div>
-  <div class="panel"><div class="pb"><div class="fg"><div><label>시공사명 *</label><input id="rq1"></div><div><label>담당자명 *</label><input id="rq2"></div><div><label>연락처 *</label><input id="rq3"></div><div><label>참여 예정 인원 * (3명 미만은 초청세미나)</label><input type="number" id="rq4" min="1" value="3" oninput="$('rqMat').value=this.value+'부'"></div><div><label>준비자료 (자동)</label><input id="rqMat" value="3부" readonly></div><div><label style="display:flex;gap:6px;color:var(--ink)"><input type="checkbox" id="rqInv"> 초청세미나로 신청 (우리 사옥)</label><div class="sub">참석 인원이 3명 미만이면 자동으로 초청세미나가 됩니다</div></div></div>
+  <div class="panel"><div class="pb"><div class="fg"><div><label>시공사명 *</label><input id="rq1"></div><div><label>담당자명 *</label><input id="rq2"></div><div><label>연락처 *</label><input id="rq3"></div><div><label>참여 예정 인원 * (3명 미만은 초청세미나)</label><input type="number" id="rq4" min="1" value="3" oninput="$('rqMat').value=this.value+'부'"></div><div><label>준비자료 (자동)</label><input id="rqMat" value="3부" readonly></div><div><label style="display:flex;gap:6px;color:var(--ink)"><input type="checkbox" id="rqInv"> 초청세미나로 신청 (우리 사옥)</label><div class="sub">참석 인원이 3명 미만이면 자동으로 초청세미나가 됩니다</div></div><div style="grid-column:1/-1"><label>비고</label><textarea id="rq7" style="min-height:70px" placeholder="예: 시공사 빔설치 예정, 동반참석"></textarea></div></div>
    <div style="margin-top:12px"><label>고객사 사옥 주소 *</label><input id="rq5" style="width:100%" placeholder="예: 경기도 화성시 동탄대로 123" oninput="rqZone()"><div class="sub" id="rqZ"></div></div>
    <div class="fg" style="margin-top:12px">${[1,2,3].map(i=>`<div><label>${i}순위 희망일 *</label><input type="date" id="rd${i}"></div>`).join('')}<div><label>특정 담당자 고정 (선택)</label><select id="rq6"><option value="">자동배정</option>${S.staff.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select></div></div>
    <div class="row" style="justify-content:flex-end;margin-top:14px"><button class="btn pri" onclick="submitReq()">접수 저장 후 자동배정</button></div></div></div>`;
@@ -551,7 +551,7 @@ function rRequest(){
 function rqZone(){const c=cityOf($('rq5').value),z=c&&zoneFor(c);$('rqZ').textContent=c?(z?c+' · '+z.name+' · 가능 기간 '+z.start+' ~ '+z.end:c+' · 권역 기간 미설정'):'지역 인식 안 됨';if(z)[1,2,3].forEach(i=>{$('rd'+i).min=z.start;$('rd'+i).max=z.end})}
 function submitReq(){
   const v=i=>$(i).value.trim();
-  const e=applyResponse({name:v('rq1'),contact:v('rq2'),phone:v('rq3'),people:v('rq4'),address:v('rq5'),d1:v('rd1'),d2:v('rd2'),d3:v('rd3'),invite:$('rqInv').checked});
+  const e=applyResponse({name:v('rq1'),contact:v('rq2'),phone:v('rq3'),people:v('rq4'),address:v('rq5'),d1:v('rd1'),d2:v('rd2'),d3:v('rd3'),invite:$('rqInv').checked,remark:v('rq7')});
   if(e.length)return alert('저장하지 못했습니다:\n- '+e.join('\n- '));
   if(v('rq6'))comp(S.companies.find(c=>c.name===v('rq1')).id).fixedStaffId=v('rq6');
   autoAssign();go('schedule');
@@ -571,7 +571,7 @@ function rSchedule(){
   $('p-schedule').innerHTML=`<div class="title-row"><div><h1>배정 일정</h1><div class="desc">카드를 누르면 상세·확정·담당자 불가 표시·대타 찾기. 회색 카드는 연동된 기존 일정(샘플)입니다.</div></div>${role==='admin'?'<button class="btn pri" onclick="autoAssign();renderAll()">자동배정 다시 계산</button>':''}</div>
   <div class="row" style="margin-bottom:10px">${staffPick}<button class="btn" onclick="ui.week=addDays(ui.week,-7);rSchedule()">◀ 이전 주</button><input type="date" value="${ui.week}" onchange="ui.week=mondayOf(this.value);rSchedule()"><button class="btn" onclick="ui.week=addDays(ui.week,7);rSchedule()">다음 주 ▶</button></div>
   <div class="week">${days.map(d=>`<div class="day"><div class="dh" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center" title="클릭하면 이 날의 동선을 봅니다" onclick="dayRoute('${d}')"><span>${fmtD(d)}</span><span class="sub">🧭 동선</span></div>${evs.filter(e=>e.date===d).map(e=>`<div class="ev old"><b>${esc(e.title)}</b> (기존)<br>${e.end-e.start>=540?'종일':fmtT(e.start)+'–'+fmtT(e.end)} · ${esc(sname(e.staffId))}${e.city?' · '+esc(e.city):''}</div>`).join('')}
-   ${sems.filter(s=>s.date===d).sort((a,b)=>a.start-b.start).map(s=>`<div class="ev sem ${s.status}" onclick="semModal('${s.id}')"><b>${fmtT(s.start)}–${fmtT(s.end)} ${esc(cname(s.companyId))}</b><br>${esc(sname(s.staffId))} · ${esc(s.city)} ${s.status==='declined'?'<span class="badge b-bad">불가 표시</span>':s.status==='confirmed'?'<span class="badge b-ok">확정</span>':s.status==='done'?'<span class="badge b-ok">완료</span>':'<span class="badge b-warn">제안</span>'}${s.note?'<br><span class="sub">'+esc(s.note)+'</span>':''}</div>`).join('')}</div>`).join('')}</div>
+   ${sems.filter(s=>s.date===d).sort((a,b)=>a.start-b.start).map(s=>`<div class="ev sem ${s.status}" onclick="semModal('${s.id}')"><b>${fmtT(s.start)}–${fmtT(s.end)} ${esc(cname(s.companyId))}</b><br>${esc(sname(s.staffId))} · ${esc(s.city)} ${s.status==='declined'?'<span class="badge b-bad">불가 표시</span>':s.status==='confirmed'?'<span class="badge b-ok">확정</span>':s.status==='done'?'<span class="badge b-ok">완료</span>':'<span class="badge b-warn">제안</span>'}${s.note?'<br><span class="sub">'+esc(s.note)+'</span>':''}${(s.remark||comp(s.companyId).remark)?'<br><span class="sub">📝 '+esc(s.remark||comp(s.companyId).remark)+'</span>':''}</div>`).join('')}</div>`).join('')}</div>
   ${mine?`<div class="panel" style="margin-top:14px"><div class="ph">나의 불가일 (개인 사유 사전 등록)</div><div class="pb"><div class="row"><input type="date" id="offD"><input id="offR" placeholder="사유"><button class="btn" onclick="addOff('${mine}')">등록</button></div>${sOff(mine)}</div></div>`:`<div class="panel" style="margin-top:14px"><div class="ph">미배정 업체 (${miss.length}) <span class="sub">희망일을 누르면 그날의 동선과 배정 가능한 담당자를 볼 수 있습니다</span></div><div class="tw"><table><tr><th>업체</th><th>상태</th><th>희망일 (클릭)</th><th>미배정 사유</th></tr>${miss.map(c=>`<tr><td><b>${esc(c.name)}</b><div class="sub">${esc(c.city)}</div></td><td>${badge(statusOf(c))}</td><td>${c.prefs.map(d=>`<button class="btn sm" style="margin:2px" onclick="dayRoute('${d}')">${fmtD(d)}</button>`).join('')||'-'}</td><td>${diagnose(c).map(esc).join(' / ')}</td></tr>`).join('')||'<tr><td class="sub">없음</td></tr>'}</table></div></div>`}`;
 }
 function sOff(id){const p=S.staff.find(s=>s.id===id);return '<div style="margin-top:8px">'+(p.off.map((o,i)=>`<span class="badge b-warn">${fmtD(o.date)} ${esc(o.reason)} <a href="#" onclick="rmOff('${id}',${i});return false">×</a></span> `).join('')||'<span class="sub">등록된 불가일 없음</span>')+'</div>'}
@@ -585,7 +585,9 @@ function semModal(id){
   openModal(c.name,`<p>${fmtD(s.date)} ${fmtT(s.start)}–${fmtT(s.end)} · <b>${esc(sname(s.staffId))}</b> · ${badge(s.status==='confirmed'?'확정':s.status==='done'?'진행완료':s.status==='declined'?'X 진행 안 함':'배정제안').replace('X 진행 안 함','담당자 불가')}</p>
   <div class="fg"><div class="kpi"><span>참석 인원</span><strong>${c.people}명</strong></div><div class="kpi"><span>준비 자료</span><strong>${c.people}부</strong></div><div class="kpi"><span>희망 순위</span><strong>${s.rank+1}순위</strong></div></div>
   <p><b>주소</b> ${esc(s.address)}<br><b>담당 연락처</b> ${esc(c.contact)} ${esc(c.phone)}</p>
+  ${c.remark?`<div class="notice">📝 업체 비고: ${esc(c.remark)}</div>`:''}
   ${s.note?`<div class="notice">${esc(s.note)}</div>`:''}
+  <div style="margin:8px 0"><label>비고 (이 세미나)</label><textarea id="smr" style="min-height:60px" placeholder="예: 시공사 빔설치 예정, 카탈로그 50부 요청">${esc(s.remark||'')}</textarea><button class="btn sm" style="margin-top:4px" onclick="saveSemRemark('${s.id}')">비고 저장</button></div>
   ${(s.legs||[]).length?`<b>이동</b><table>${s.legs.map(l=>`<tr><td>${esc(l.from)}${l.fromBase?'(출발지)':''} → ${esc(l.to)}</td><td>약 ${l.km}km · ${l.min}분</td><td>${l.gap==null?'':'간격 '+l.gap+'분'}</td></tr>`).join('')}</table>`:''}
   ${r&&!r.ok?`<div class="notice bad">현재 조건에서 문제: ${esc(r.reasons.join(' / '))}</div>`:''}${(s.warns||[]).length?`<div class="notice warn">${esc(s.warns.join(' / '))}</div>`:''}
   <div class="row" style="justify-content:flex-end;margin-top:12px">
@@ -738,18 +740,20 @@ function rNoReply(){
   $('p-noreply').innerHTML=`<div class="title-row"><div><h1>미회신 업체</h1><div class="desc">메일을 보냈지만 회신하지 않은 업체입니다. 회신 마감일이 지나면 자동으로 여기에 모이고, 마감일은 언제든 바꿀 수 있습니다. <b>미회신 업체는 올해 배정 대상이 아닙니다.</b></div></div><div class="row"><button class="btn" onclick="exportNoReply()">미회신 목록 CSV</button></div></div>
   <div class="panel"><div class="pb row"><label style="margin:0">기본 회신 마감일</label><input type="date" value="${esc(S.settings.replyDeadline||'')}" onchange="S.settings.replyDeadline=this.value;renderAll()"><span class="sub">권역별 마감일은 설정 화면에서 따로 지정할 수 있습니다. 오늘: ${t}</span></div></div>
   <div class="kpis"><div class="kpi"><span>메일 발송</span><strong>${S.companies.filter(c=>c.mail.sent).length}</strong></div><div class="kpi"><span>회신 완료</span><strong>${S.companies.filter(hasReplied).length}</strong></div><div class="kpi"><span>미회신</span><strong>${nr.length}</strong></div><div class="kpi"><span>마감 전 대기</span><strong>${wait.length}</strong></div></div>
-  <div class="panel"><div class="ph">미회신 (${nr.length})</div><div class="tw"><table><tr><th>업체</th><th>지역</th><th>대표자</th><th>연락처</th><th>발송일</th><th>경과</th><th>마감일</th><th>사유</th><th>전화 연락</th><th>메모</th><th></th></tr>${nr.map(c=>row(c)+`<td>${c.replyFlag==='noreply'?'수동 처리':'마감 경과'}</td><td><label style="display:flex;gap:4px;color:var(--ink);font-size:13px"><input type="checkbox" ${c.callChecked?'checked':''} onchange="toggleCall('${c.id}',this.checked)">${c.callChecked?esc(c.callChecked):'미연락'}</label></td><td><input value="${esc(c.memo||'')}" placeholder="메모" onchange="setMemo('${c.id}',this.value)"></td><td><div class="row"><button class="btn sm" onclick="resendOne('${c.id}')">재발송(시뮬)</button><button class="btn sm" onclick="keepWait('${c.id}')">대기로 복귀</button></div></td></tr>`).join('')||'<tr><td colspan=11 class="sub">미회신 업체가 없습니다.</td></tr>'}</table></div></div>
+  <div class="panel"><div class="ph">미회신 (${nr.length})</div><div class="tw"><table><tr><th>업체</th><th>지역</th><th>대표자</th><th>연락처</th><th>발송일</th><th>경과</th><th>마감일</th><th>사유</th><th>전화 연락</th><th>비고</th><th></th></tr>${nr.map(c=>row(c)+`<td>${c.replyFlag==='noreply'?'수동 처리':'마감 경과'}</td><td><label style="display:flex;gap:4px;color:var(--ink);font-size:13px"><input type="checkbox" ${c.callChecked?'checked':''} onchange="toggleCall('${c.id}',this.checked)">${c.callChecked?esc(c.callChecked):'미연락'}</label></td><td><input value="${esc(c.remark||'')}" placeholder="비고" onchange="setMemo('${c.id}',this.value)"></td><td><div class="row"><button class="btn sm" onclick="resendOne('${c.id}')">재발송(시뮬)</button><button class="btn sm" onclick="keepWait('${c.id}')">대기로 복귀</button></div></td></tr>`).join('')||'<tr><td colspan=11 class="sub">미회신 업체가 없습니다.</td></tr>'}</table></div></div>
   <div class="panel"><div class="ph">마감 전 회신 대기 (${wait.length})</div><div class="tw"><table><tr><th>업체</th><th>지역</th><th>대표자</th><th>연락처</th><th>발송일</th><th>경과</th><th>마감일</th><th></th></tr>${wait.map(c=>row(c)+`<td><button class="btn sm bad" onclick="forceNoReply('${c.id}')">미회신 처리</button></td></tr>`).join('')||'<tr><td colspan=8 class="sub">없음</td></tr>'}</table></div></div>`;
 }
 function toggleCall(id,v){comp(id).callChecked=v?now():'';renderAll()}
-function setMemo(id,v){comp(id).memo=v;save()}
+function setMemo(id,v){comp(id).remark=v;save()}
+function setRemark(id,v){comp(id).remark=v;save()}
+function saveSemRemark(id){const s=S.seminars.find(x=>x.id===id);s.remark=$('smr').value.trim();save();renderAll();toast('비고를 저장했습니다.')}
 function resendOne(id){const c=comp(id);c.mail.resend=(c.mail.resend||0)+1;c.mail.sentAt=now().slice(0,10);logit('재발송(시뮬): '+c.name);renderAll()}
 function keepWait(id){comp(id).replyFlag='keep';renderAll()}
 function forceNoReply(id){comp(id).replyFlag='noreply';renderAll()}
 function dl(name,text,type){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['﻿'+text],{type:type||'text/csv'}));a.download=name;a.click()}
 const csvq=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';
 const toCsv=rows=>rows.map(r=>r.map(csvq).join(',')).join('\n');
-function exportNoReply(){const t=todayKST();dl('미회신_업체목록_'+t+'.csv',toCsv([['업체명','지역','대표자','주소','연락처','발송일','경과일','마감일','사유','전화연락','메모']].concat(S.companies.filter(isNoReply).map(c=>[c.name,c.city,c.rep||'',c.address,c.phone||'',c.mail.sentAt,c.mail.sentAt?daysBetween(c.mail.sentAt,t):'',deadlineFor(c),c.replyFlag==='noreply'?'수동 처리':'마감 경과',c.callChecked||'',c.memo||'']))))}
+function exportNoReply(){const t=todayKST();dl('미회신_업체목록_'+t+'.csv',toCsv([['업체명','지역','대표자','주소','연락처','발송일','경과일','마감일','사유','전화연락','비고']].concat(S.companies.filter(isNoReply).map(c=>[c.name,c.city,c.rep||'',c.address,c.phone||'',c.mail.sentAt,c.mail.sentAt?daysBetween(c.mail.sentAt,t):'',deadlineFor(c),c.replyFlag==='noreply'?'수동 처리':'마감 경과',c.callChecked||'',c.remark||'']))))}
 
 /* ---------- 상시 알람 (연락처 없음) ---------- */
 function sticky(){return S.companies.filter(c=>c.alertPhone&&!String(c.phone||'').trim())}
@@ -807,7 +811,7 @@ function rAudit(){
 function exportAudit(){dl('수정내역_'+todayKST()+'.csv',toCsv([['시각','작성자','구분','항목','대상','필드','이전','이후']].concat((S.audit||[]).map(x=>[x.at,x.who,x.kind,x.col,x.target,x.field,x.before,x.after]))))}
 function exportAll(){
   const t=todayKST();
-  dl('업체현황_'+t+'.csv',toCsv([['고유번호','업체명','대표자','지역','주소','연락처','상태','초청세미나','메일발송일','회신일','희망1','희망2','희망3','배정일','배정시각','담당자','지정담당자','참석횟수','대상횟수','참석률','전화체크','메모','비고']].concat(S.companies.map(c=>{const s=semOf(c),a=attendSummary(c);return [c.id,c.name,c.rep||'',c.city,c.address,c.phone||'',statusOf(c),c.invite?'Y':'',c.mail.sentAt,c.mail.repliedAt,c.prefs[0]||'',c.prefs[1]||'',c.prefs[2]||'',s?s.date:'',s?fmtT(s.start):'',s?sname(s.staffId):'',c.fixedStaffId?sname(c.fixedStaffId):'',a.n,a.d,a.d?Math.round(a.rate*100)+'%':'',c.callChecked||'',c.memo||'',c.note||'']}))));
+  dl('업체현황_'+t+'.csv',toCsv([['고유번호','업체명','대표자','지역','주소','연락처','상태','초청세미나','메일발송일','회신일','희망1','희망2','희망3','배정일','배정시각','담당자','지정담당자','참석횟수','대상횟수','참석률','전화체크','비고','시스템 메모']].concat(S.companies.map(c=>{const s=semOf(c),a=attendSummary(c);return [c.id,c.name,c.rep||'',c.city,c.address,c.phone||'',statusOf(c),c.invite?'Y':'',c.mail.sentAt,c.mail.repliedAt,c.prefs[0]||'',c.prefs[1]||'',c.prefs[2]||'',s?s.date:'',s?fmtT(s.start):'',s?sname(s.staffId):'',c.fixedStaffId?sname(c.fixedStaffId):'',a.n,a.d,a.d?Math.round(a.rate*100)+'%':'',c.callChecked||'',c.remark||'',c.note||'']}))));
   dl('배정현황_'+t+'.csv',toCsv([['업체','일자','시작','종료','담당자','지역','상태','희망순위','이동분','비고']].concat(S.seminars.map(s=>[cname(s.companyId),s.date,fmtT(s.start),fmtT(s.end),sname(s.staffId),s.city,s.status,s.rank+1,s.travel,s.note||'']))));
   dl('불가_전화목록_'+t+'.csv',toCsv([['구분','업체','담당자','사유','시각','처리']].concat(S.declines.map(d=>['담당자 불가',cname(d.companyId),sname(d.staffId),d.reason,d.at,d.revoked?'철회':'']),S.calls.map(k=>['사과 전화',cname(k.companyId),'',k.reason,k.at,k.done?'완료':'필요']))));
   exportAudit();
@@ -1015,8 +1019,9 @@ const curY=()=>S.settings.curYear||2027;
 const hasReplied=c=>!!(c.mail&&c.mail.replied)||(c.prefs&&c.prefs.length===3);
 function migrate(){
   const s=S.settings;s.curYear=s.curYear||2027;s.inviteDates=s.inviteDates||[];s.inviteVenue=s.inviteVenue||'푸어 사옥';
+  if(!S.tpls.some(t=>t.id==='t5'))S.tpls.push({id:'t5',name:'신청 폼 안내 (항목 포함)',subject:'찾아가는 세미나 신청 안내 ({업체명})',body:'안녕하세요, {업체명} 담당자님.\n\n찾아가는 세미나 신청을 받고 있습니다.\n· 세미나 가능 기간: {세미나기간}\n· 회신 마감: {회신마감일}\n· 참석 인원이 3명 미만이거나 방문이 어려우시면 초청세미나(푸어 사옥)로 신청해 주세요.\n\n[신청 항목]\n{신청항목}\n\n아래 링크에서 신청해 주세요.\n{신청링크}'});
   if(JSON.stringify(s.slots)==='[540,600,660,780,840,900,960]')s.slots=[600,840];
-  S.companies.forEach(c=>{c.invite=!!c.invite;c.inviteDate=c.inviteDate||'';c.hist=c.hist||{}});
+  S.companies.forEach(c=>{c.invite=!!c.invite;c.inviteDate=c.inviteDate||'';c.hist=c.hist||{};if(c.remark==null)c.remark=c.memo||''});
 }
 /* 연도별 이력 정규화: {invited,replied,type('' | visit | invite),rank,date,staff,time,people,order} */
 function H(c,y){
@@ -1061,11 +1066,11 @@ function plan(targets,base){
 const _applyOld=applyResponse;
 applyResponse=function(r){
   const ppl=+r.people,inv=!!r.invite||(ppl>=1&&ppl<3),name=String(r.name||'').trim();
-  if(!inv)return _applyOld(r);
+  if(!inv){const e=_applyOld(r);if(!e.length&&r.remark){const c0=S.companies.find(x=>x.name===name);if(c0)c0.remark=r.remark}return e}
   const errs=[];if(!name)errs.push('업체명 없음');if(!(ppl>=1))errs.push('인원 확인 필요');if(errs.length)return errs;
   let c=S.companies.find(x=>x.name===name);
   if(!c){const addr=String(r.address||'').trim();c={id:'HS-'+String(S.companies.length+1).padStart(4,'0'),name,city:locOf(addr),address:addr,x:false,fixedStaffId:'',contact:'',phone:'',email:'',people:ppl,rep:'',replyFlag:'',callChecked:'',memo:'',mail:{sent:false,sentAt:'',replied:false,repliedAt:'',resend:0},prefs:[],hist:{},invite:true,inviteDate:''};S.companies.push(c);logit('미등록 업체 신규 등록: '+name)}
-  c.people=ppl;c.contact=r.contact||c.contact;c.phone=r.phone||c.phone;c.invite=true;c.mail.replied=true;c.mail.repliedAt=now().slice(0,10);c.replyFlag='';
+  c.people=ppl;c.contact=r.contact||c.contact;c.phone=r.phone||c.phone;c.invite=true;if(r.remark)c.remark=r.remark;c.mail.replied=true;c.mail.repliedAt=now().slice(0,10);c.replyFlag='';
   const ds=[r.d1,r.d2,r.d3].filter(dayOK),idates=S.settings.inviteDates||[];
   c.inviteDate=ds.find(d=>idates.includes(d))||idates[0]||ds[0]||'';
   S.seminars.forEach(s=>{if(s.companyId===c.id&&['proposed','confirmed'].includes(s.status))s.status='cancelled'});
@@ -1073,7 +1078,7 @@ applyResponse=function(r){
 };
 function inviteHtml(){
   const l=S.companies.filter(c=>c.invite&&hasReplied(c)&&!c.x),dates=[...new Set(l.map(c=>c.inviteDate||'미정'))].sort();
-  return `<div class="panel" style="margin-top:14px"><div class="ph">🏢 초청세미나 (${esc(S.settings.inviteVenue)}) <span class="sub">${l.length}곳 · 참석 3명 미만이거나 방문이 어려운 업체는 우리 사옥에서 진행</span></div><div class="tw" style="max-height:none"><table style="min-width:0"><tr><th>날짜</th><th>업체</th><th>인원</th><th>연락처</th><th></th></tr>${dates.map(d=>l.filter(c=>(c.inviteDate||'미정')===d).map((c,i,a)=>`<tr><td>${i===0?'<b>'+(dayOK(d)?fmtD(d):'날짜 미정')+'</b> <span class="sub">('+a.length+'곳)</span>':''}</td><td>${esc(c.name)}</td><td>${c.people}명</td><td>${esc(c.phone||'-')}</td><td><select onchange="setInviteDate('${c.id}',this.value)"><option value="">날짜 미정</option>${(S.settings.inviteDates||[]).map(x=>`<option value="${x}" ${c.inviteDate===x?'selected':''}>${fmtD(x)}</option>`).join('')}</select></td></tr>`).join('')).join('')||'<tr><td colspan=5 class="sub">초청세미나 업체가 없습니다. 인원 3명 미만 신청은 자동으로 여기에 모입니다.</td></tr>'}</table></div></div>`;
+  return `<div class="panel" style="margin-top:14px"><div class="ph">🏢 초청세미나 (${esc(S.settings.inviteVenue)}) <span class="sub">${l.length}곳 · 참석 3명 미만이거나 방문이 어려운 업체는 우리 사옥에서 진행</span></div><div class="tw" style="max-height:none"><table style="min-width:0"><tr><th>날짜</th><th>업체</th><th>인원</th><th>연락처</th><th>비고</th><th></th></tr>${dates.map(d=>l.filter(c=>(c.inviteDate||'미정')===d).map((c,i,a)=>`<tr><td>${i===0?'<b>'+(dayOK(d)?fmtD(d):'날짜 미정')+'</b> <span class="sub">('+a.length+'곳)</span>':''}</td><td>${esc(c.name)}</td><td>${c.people}명</td><td>${esc(c.phone||'-')}</td><td>${esc(c.remark||'')}</td><td><select onchange="setInviteDate('${c.id}',this.value)"><option value="">날짜 미정</option>${(S.settings.inviteDates||[]).map(x=>`<option value="${x}" ${c.inviteDate===x?'selected':''}>${fmtD(x)}</option>`).join('')}</select></td></tr>`).join('')).join('')||'<tr><td colspan=6 class="sub">초청세미나 업체가 없습니다. 인원 3명 미만 신청은 자동으로 여기에 모입니다.</td></tr>'}</table></div></div>`;
 }
 function setInviteDate(id,v){comp(id).inviteDate=v;renderAll()}
 const _rSchedOld=rSchedule;
@@ -1087,6 +1092,7 @@ function companyModal(id){
   <div style="margin-top:10px"><label>주소 (시·군 이름이 들어가야 지역이 인식됩니다)</label><input id="ca" style="width:100%" value="${esc(c.address)}"></div>
   <div class="fg" style="margin-top:10px">${[0,1,2].map(i=>`<div><label>${i+1}순위 희망일</label><input type="date" id="cd${i}" value="${esc(p[i]||'')}"></div>`).join('')}</div>
   <div class="row" style="margin-top:12px"><label style="display:flex;gap:6px;margin:0;color:var(--ink)"><input type="checkbox" id="cinv" ${c.invite?'checked':''}> 초청세미나로 진행 (${esc(S.settings.inviteVenue)})</label><select id="cinvd"><option value="">초청 날짜 미정</option>${(S.settings.inviteDates||[]).map(x=>`<option value="${x}" ${c.inviteDate===x?'selected':''}>${fmtD(x)}</option>`).join('')}</select></div>
+  <div style="margin-top:12px"><label>비고</label><textarea id="crm" style="min-height:70px" placeholder="예: 시공사 빔설치 예정, 동반참석 업체, 추가 인원 가능">${esc(c.remark||'')}</textarea>${c.note?'<div class="sub">시스템 메모: '+esc(c.note)+'</div>':''}</div>
   <h4>연도별 참석 이력 <span class="sub">(수정하면 참석률에 바로 반영됩니다)</span></h4>
   <div class="tw" style="max-height:none"><table style="min-width:0"><tr><th>연도</th><th>대상</th><th>참석</th><th>날짜</th><th>담당자</th><th>수주액(백만원)</th></tr>${ys.map(y=>{const h=H({...c,mail:c.mail||{},prefs:c.prefs||[],hist:c.hist||{}},y);return `<tr><td>${y}</td><td><input type="checkbox" id="hi${y}" ${h.invited?'checked':''}></td><td><select id="ht${y}"><option value="">미참석</option><option value="visit" ${h.type==='visit'?'selected':''}>방문 세미나</option><option value="invite" ${h.type==='invite'?'selected':''}>초청세미나</option></select></td><td><input type="date" id="hd${y}" value="${esc(h.date||'')}"></td><td><input id="hs${y}" value="${esc(h.staff||'')}" style="width:90px"></td><td><input type="number" id="ho${y}" value="${h.order||0}" style="width:90px"></td></tr>`}).join('')}</table></div>
   <div class="sub" style="margin-top:6px">올해(${curY()}) 시즌의 참석은 배정 확정·초청세미나 신청에서 자동으로 계산됩니다.</div>
@@ -1097,7 +1103,7 @@ function saveCompany(id,yl){
   if(!name||(!addr&&!inv)||!(ppl>=1))return alert('업체명, 주소(초청세미나는 생략 가능), 인원을 확인하세요.');
   if(prefs.length&&(prefs.length!==3||new Set(prefs).size!==3||!prefs.every(dayOK)))return alert('희망일은 비우거나, 서로 다른 날짜 3개를 모두 입력하세요.');
   let c=id?comp(id):null;if(!c){c={id:'HS-'+String(S.companies.length+1).padStart(4,'0'),x:false,fixedStaffId:'',replyFlag:'',callChecked:'',memo:'',mail:{sent:false,sentAt:'',replied:false,repliedAt:'',resend:0},prefs:[],hist:{}};S.companies.push(c)}
-  Object.assign(c,{name,address:addr,city:locOf(addr),rep:v('cr'),contact:v('cc'),phone:v('cp'),email:v('ce'),people:ppl,invite:inv,inviteDate:v('cinvd')});
+  Object.assign(c,{name,address:addr,city:locOf(addr),rep:v('cr'),contact:v('cc'),phone:v('cp'),email:v('ce'),people:ppl,invite:inv,inviteDate:v('cinvd'),remark:v('crm')});
   if(JSON.stringify(c.prefs)!==JSON.stringify(prefs)){c.prefs=prefs;S.seminars=S.seminars.filter(s=>!(s.companyId===c.id&&s.status==='proposed'));if(prefs.length)c.mail.replied=true}
   if(inv){c.mail.replied=true;S.seminars.forEach(s=>{if(s.companyId===c.id&&['proposed','confirmed'].includes(s.status))s.status='cancelled'})}
   for(const y of String(yl||'').split(',').filter(Boolean)){
@@ -1176,6 +1182,51 @@ function doImportSeason(){
     void nm;renderAll();
   };r.readAsText(f,'utf-8');
 }
+
+/* ================= 신청 폼 양식 (메일·회신 화면) ================= */
+function formZoneSel(){const z=S.zones.find(x=>x.id===ui.formZone)||S.zones[0];return z}
+function formQuestions(z){
+  const a=z?z.start:'',b=z?z.end:'';
+  return [
+    {q:'시공사명',type:'단답형',req:'필수',note:'(주)·주식회사까지 사업자등록증 상호 그대로 적어 주세요.'},
+    {q:'담당자명',type:'단답형',req:'필수',note:'일정 조율 시 연락드릴 분'},
+    {q:'연락처',type:'단답형',req:'필수',note:'응답 검증: 정규식 일치 ^[0-9\\-\\s]{9,13}$ (예: 010-0000-0000)'},
+    {q:'참여 예정 인원',type:'숫자(단답형)',req:'필수',note:'응답 검증: 숫자 → 0보다 큼. 설명 문구: "3명 미만이면 푸어 사옥에서 진행하는 초청세미나로 안내됩니다."'},
+    {q:'세미나 방식',type:'객관식',req:'필수',note:'선택지: ① 방문 세미나(저희 사옥으로 방문 희망) ② 초청세미나(푸어 사옥에서 참석)'},
+    {q:'고객사 사옥 주소',type:'단답형',req:'필수',note:'시·군까지 포함해 적어 주세요. 예) 경기도 화성시 동탄대로 123 (초청세미나는 "초청세미나"라고 적어도 됩니다)'},
+    {q:'희망일자 1순위',type:'날짜',req:'필수',note:'응답 검증: 날짜 → 이후 '+a+' → 이전 '+b+'. 가능한 한 1순위로 배정합니다.'},
+    {q:'희망일자 2순위',type:'날짜',req:'필수',note:'응답 검증: 날짜 → '+a+' ~ '+b+' (1순위와 다른 날짜)'},
+    {q:'희망일자 3순위',type:'날짜',req:'필수',note:'응답 검증: 날짜 → '+a+' ~ '+b+' (1·2순위와 다른 날짜)'},
+    {q:'비고',type:'장문형',req:'선택',note:'예) 시공사 빔 설치 예정, 동반 참석 업체, 추가 인원 가능'}
+  ];
+}
+function formIntroText(z){
+  const dl=(z&&z.deadline)||S.settings.replyDeadline||'';
+  return curY()+'년 찾아가는 세미나 신청'+(z?' — '+z.name:'')+'\n'+
+  '시공사를 직접 찾아가 진행하는 세미나의 신청서입니다.\n\n'+
+  '· 세미나 가능 기간: '+(z?z.start+' ~ '+z.end:'(권역 기간 미설정)')+' (평일, 공휴일 제외)\n'+
+  '· 희망일자 1·2·3순위를 서로 다른 날짜로 선택해 주세요. 가능한 한 1순위로 배정해 드립니다.\n'+
+  '· 참석 인원이 3명 미만이거나 방문이 어려우시면 \'초청세미나\'(푸어 사옥)로 신청해 주세요.\n'+
+  (dl?'· 회신 마감: '+dl+'\n':'')+
+  '· 일정이 확정되면 담당자님께 따로 안내드립니다.';
+}
+function formItemsText(z){return formQuestions(z||formZoneSel()).map((x,i)=>(i+1)+'. '+x.q+' ('+x.type+', '+x.req+')').join('\n')}
+function formAllText(z){return formIntroText(z)+'\n\n[질문 목록]\n'+formQuestions(z).map((x,i)=>(i+1)+'. '+x.q+' | '+x.type+' | '+x.req+' | '+x.note).join('\n')}
+function copyText(t){
+  const done=()=>toast('복사했습니다. 구글폼에 붙여넣으세요.');
+  try{navigator.clipboard.writeText(t).then(done,()=>{fb()})}catch(e){fb()}
+  function fb(){const ta=document.createElement('textarea');ta.value=t;document.body.appendChild(ta);ta.select();try{document.execCommand('copy');done()}catch(e){alert('복사하지 못했습니다. 아래 내용을 직접 선택해 복사하세요.')}ta.remove()}
+}
+function formPanelHtml(){
+  const z=formZoneSel();
+  return `<div class="panel"><div class="ph">📝 신청 폼 양식 <span class="sub">구글폼을 만들 때 그대로 옮기세요 · 권역을 고르면 가능 기간이 자동으로 들어갑니다</span></div><div class="pb">
+   <div class="row" style="margin-bottom:10px"><label style="margin:0">권역</label><select onchange="ui.formZone=this.value;rMail()">${S.zones.map(x=>`<option value="${x.id}" ${x.id===z.id?'selected':''}>${esc(x.name)} (${esc(x.start)} ~ ${esc(x.end)})</option>`).join('')}</select><button class="btn sm" onclick="copyText(formIntroText(formZoneSel()))">안내문 복사</button><button class="btn sm" onclick="copyText(formAllText(formZoneSel()))">전체(안내문+질문) 복사</button></div>
+   <label>폼 제목 · 설명 (안내문)</label><div class="notice" style="white-space:pre-wrap;margin-bottom:12px">${esc(formIntroText(z))}</div>
+   <div class="tw" style="max-height:none"><table style="min-width:0"><tr><th>#</th><th>질문</th><th>유형</th><th>필수</th><th>설정 · 설명</th></tr>${formQuestions(z).map((x,i)=>`<tr><td>${i+1}</td><td><b>${esc(x.q)}</b></td><td>${esc(x.type)}</td><td>${x.req==='필수'?'<span class="badge b-bad">필수</span>':'<span class="badge">선택</span>'}</td><td class="sub" style="font-size:13px">${esc(x.note)}</td></tr>`).join('')}</table></div>
+   <div class="sub" style="margin-top:8px">구글폼에서 이 순서대로 질문을 만든 뒤 "응답 → 스프레드시트에 연결"을 눌러 두면, 나중에 앱이 응답 시트를 읽어 날짜를 자동으로 취합합니다. 질문 제목은 위 이름 그대로 두어야 앱이 열을 인식합니다. 권역마다 기간이 다르면 위에서 권역을 바꿔 폼을 권역별로 하나씩 만드세요.</div></div></div>`;
+}
+const _rMailOld=rMail;
+rMail=function(){_rMailOld();const tr=$('p-mail').querySelector('.title-row');if(tr)tr.insertAdjacentHTML('afterend',formPanelHtml())};R.mail=rMail;
 
 S=load();migrate();resnap();renderAll();extInit();if(openCalls().length)showUrgent();sticky().forEach(c=>toast('📞 연락처 없음: '+c.name+' — 입력 전까지 계속 알립니다'));
 </script>
