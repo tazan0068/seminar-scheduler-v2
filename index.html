@@ -228,7 +228,7 @@ function seed(){
     return {id:'HS-'+String(i+1).padStart(4,'0'),name:r[0],city:locOf(r[2]),rep:'대표 '+r[0].slice(0,2),address:r[2],people:r[3],contact:'담당 '+r[0].slice(0,2),phone:'010-0000-'+String(1000+i),email:'contact'+(i+1)+'@example.com',
       x:false,fixedStaffId:'',replyFlag:'',callChecked:'',memo:'',mail:{sent:i<12,sentAt:i<12?'2026-10-05':'',replied:replied,repliedAt:replied?'2026-10-09':'',resend:0},
       prefs:replied?[wd[i%wd.length],wd[(i+1)%wd.length],wd[(i+2)%wd.length]]:[],
-      hist:r[4]?{2025:{done:true,date:r[4].date,staff:r[4].staff,people:r[4].people,order:r[4].order}}:{2025:{done:false}}};
+      hist:r[4]?{2026:{invited:true,replied:true,type:'visit',rank:0,date:r[4].date,staff:r[4].staff,people:r[4].people,order:r[4].order}}:{2026:{invited:true,replied:false,type:''}},invite:false,inviteDate:''};
   });
   const ev=(s,d,a,b,t,c)=>({id:'ev'+Math.random().toString(36).slice(2,7),staffId:s,date:d,start:a,end:b,title:t,city:c});
   const events=[ev('st1','2026-12-02',540,720,'PT 발표',L('성남')),ev('st1','2026-12-03',840,960,'내부 회의',L('수원')),ev('st2','2026-12-01',780,1020,'영업 미팅','서울'),ev('st3','2026-12-09',540,780,'현장 점검',L('천안')),ev('st4','2026-12-08',600,900,'브리핑','인천'),ev('st5','2026-12-04',540,1080,'출장',L('부천')),ev('st6','2026-12-03',540,1080,'연차',''),ev('st7','2026-12-07',540,780,'ASQ',L('안산'))];
@@ -238,7 +238,7 @@ function seed(){
     {id:'r3',name:'진성건설',contact:'이진성',phone:'010-5555-6666',people:6,address:'경기도 평택시 비전동 77',d1:'2026-12-08',d2:'2026-12-09',d3:'2026-12-10',at:'2026-10-13 08:03'},
     {id:'r4',name:'정원건설',contact:'최정원',phone:'010-7777-8888',people:2,address:'경기도 안산시 상록구 중앙로 5',d1:'2026-12-01',d2:'2026-12-18',d3:'2026-12-18',at:'2026-10-13 09:30'}];
   const st={v:3,seq:100,zones,staff,companies,events,seminars:[],declines:[],calls:[],alarms:[],inbox,respErrors:[],log:[],
-    settings:{buffer:15,sameCity:25,metroIntra:40,speed:50,hwySpeed:80,longTripMin:150,allowOvernight:false,departEarliest:360,returnLatest:1320,holidays:['2026-12-25','2027-01-01'],replyDeadline:'2026-10-20',duration:120,slots:[540,600,660,780,840,900,960],autoConfirm:false,autoReassign:true,autoAfterReply:true,sheetUrl:'',baseCity:L('수원'),extOn:true,extUrl:'',extMap:{}},audit:[],
+    settings:{buffer:15,sameCity:25,metroIntra:40,speed:50,hwySpeed:80,longTripMin:150,allowOvernight:false,departEarliest:360,returnLatest:1320,holidays:['2026-12-25','2027-01-01'],replyDeadline:'2026-10-20',duration:120,slots:[600,840],autoConfirm:false,autoReassign:true,autoAfterReply:true,sheetUrl:'',baseCity:L('수원'),extOn:true,extUrl:'',extMap:{},curYear:2027,inviteDates:[],inviteVenue:'푸어 사옥'},audit:[],
     tpls:[{id:'t1',name:'최초 안내',subject:'2026 찾아가는 세미나 신청 안내 ({업체명})',body:'안녕하세요, {업체명} 담당자님.\n\n{지역} 지역 세미나 가능 기간은 {세미나기간} 입니다.\n아래 링크에서 주소와 희망일 1·2·3순위를 회신해 주세요.\n\n{신청링크}'},
           {id:'t2',name:'리마인드',subject:'[리마인드] 2026 찾아가는 세미나 신청 ({업체명})',body:'{업체명} 담당자님, 아직 회신이 없어 다시 안내드립니다.\n기간: {세미나기간}\n\n{신청링크}'},
           {id:'t3',name:'일정 확정 안내',subject:'세미나 일정 확정 안내 ({업체명})',body:'{업체명} 담당자님, 세미나 일정이 확정되었습니다.\n일시: {세미나일자} {세미나시간}\n방문 담당자: {방문담당자}\n참석 인원: {참석인원}'},
@@ -313,7 +313,7 @@ function diagnose(c){
 function autoAssign(silent){
   S.seminars=S.seminars.filter(s=>s.status!=='proposed');
   const base=S.seminars.filter(s=>['confirmed','done'].includes(s.status));
-  const targets=S.companies.filter(c=>!c.x&&c.prefs.length===3&&!semOf(c)&&!S.calls.some(k=>!k.done&&k.companyId===c.id));
+  const targets=S.companies.filter(c=>!c.x&&c.prefs.length===3&&!c.invite&&!semOf(c)&&!S.calls.some(k=>!k.done&&k.companyId===c.id));
   const items=plan(targets,base);
   items.forEach(i=>S.seminars.push({id:uid('S'),companyId:i.companyId,staffId:i.staffId,date:i.date,start:i.start,end:i.end,city:i.city,address:i.address,status:S.settings.autoConfirm?'confirmed':'proposed',rank:i.rank,travel:i.travel,legs:i.legs,warns:i.warns,note:'',createdAt:now()}));
   const miss=targets.filter(c=>!items.some(i=>i.companyId===c.id));
@@ -326,13 +326,13 @@ const now=()=>new Date().toISOString().slice(0,16).replace('T',' ');
 function logit(t){S.log.unshift({at:now(),t});S.log=S.log.slice(0,200)}
 function semOf(c){return S.seminars.filter(s=>s.companyId===c.id&&['proposed','confirmed','done'].includes(s.status))[0]}
 function statusOf(c){
-  if(c.x)return 'X 진행 안 함';const s=semOf(c);
+  if(c.x)return 'X 진행 안 함';if(c.invite&&hasReplied(c))return '초청세미나';const s=semOf(c);
   if(s)return s.status==='done'?'진행완료':s.status==='confirmed'?'확정':'배정제안';
   if(S.calls.some(k=>!k.done&&k.companyId===c.id))return '연락필요';
   if(c.prefs.length===3)return '회신완료(미배정)';
   if(isNoReply(c))return '미회신';return c.mail.sent?'회신대기':'메일 미발송';
 }
-const badge=s=>{const m={'확정':'b-ok','진행완료':'b-ok','배정제안':'b-warn','연락필요':'b-bad','X 진행 안 함':'b-bad','회신완료(미배정)':'b-pri','회신대기':'','메일 미발송':'','미회신':'b-bad'};return '<span class="badge '+(m[s]||'')+'">'+esc(s)+'</span>'};
+const badge=s=>{const m={'확정':'b-ok','진행완료':'b-ok','배정제안':'b-warn','연락필요':'b-bad','X 진행 안 함':'b-bad','회신완료(미배정)':'b-pri','회신대기':'','메일 미발송':'','미회신':'b-bad','초청세미나':'b-pri'};return '<span class="badge '+(m[s]||'')+'">'+esc(s)+'</span>'};
 
 /* ---------- 알람 ---------- */
 function addAlarm(level,title,msg,extra){S.alarms.unshift({id:uid('A'),level,title,msg,at:now(),read:false,resolved:false,...extra});save();if(level!=='info')toast((level==='urgent'?'🚨 ':'⚠ ')+title)}
@@ -393,7 +393,7 @@ function closeUrgentGo(cid){$('urgent').classList.remove('show');go('partners');
 function openModal(t,h,big){$('mTitle').textContent=t;$('mBody').innerHTML=h;$('modalBox').classList.toggle('big',!!big);$('modal').classList.add('show')}
 function closeModal(){$('modal').classList.remove('show')}
 $('modal').addEventListener('click',e=>{if(e.target.id==='modal')closeModal()});
-const NAV=[['dashboard','대시보드','🏠',''],['setup','연동 체크리스트','✅',''],['mail','메일·회신','✉️','업무 진행'],['noreply','미회신 업체','📭','업무 진행'],['request','신청 접수','📝','업무 진행'],['schedule','배정 일정','📅','업무 진행'],['route','동선·이동시간','🧭','업무 진행'],['alarms','알람센터','🔔','업무 진행'],['partners','협력사 리스트','🏢','관리'],['staff','담당자 관리','👤','관리'],['stats','통계·이력','📊','분석·설정'],['audit','수정내역','🧾','분석·설정'],['settings','설정','⚙️','분석·설정']];
+const NAV=[['dashboard','대시보드','🏠',''],['setup','연동 체크리스트','✅',''],['mail','메일·회신','✉️','업무 진행'],['noreply','미회신 업체','📭','업무 진행'],['request','신청 접수','📝','업무 진행'],['schedule','배정 일정','📅','업무 진행'],['route','동선·이동시간','🧭','업무 진행'],['alarms','알람센터','🔔','업무 진행'],['partners','협력사 리스트','🏢','관리'],['staff','담당자 관리','👤','관리'],['stats','통계·참석률','📊','분석·설정'],['audit','수정내역','🧾','분석·설정'],['settings','설정','⚙️','분석·설정']];
 const STAFF_NAV=['schedule','route','alarms'];
 function go(p){page=p;renderAll();window.scrollTo(0,0)}
 function setRole(r){role=r;if(role!=='admin'&&!STAFF_NAV.includes(page))page='schedule';renderAll()}
@@ -415,7 +415,7 @@ function renderAll(){
 /* ---------- 대시보드 ---------- */
 function rDash(){
   const cs=S.companies.filter(c=>!c.x),st=statusOf;
-  const nSent=cs.filter(c=>c.mail.sent).length,nRep=cs.filter(c=>c.prefs.length===3).length,nAsg=cs.filter(c=>semOf(c)).length,nConf=cs.filter(c=>semOf(c)&&semOf(c).status!=='proposed').length,nDone=cs.filter(c=>semOf(c)&&semOf(c).status==='done').length;
+  const nSent=cs.filter(c=>c.mail.sent).length,nRep=cs.filter(hasReplied).length,nAsg=cs.filter(c=>semOf(c)).length,nConf=cs.filter(c=>semOf(c)&&semOf(c).status!=='proposed').length,nDone=cs.filter(c=>semOf(c)&&semOf(c).status==='done').length;
   const miss=cs.filter(c=>['회신완료(미배정)','연락필요'].includes(st(c))),prop=S.seminars.filter(s=>s.status==='proposed').length,nNo=cs.filter(isNoReply).length,newRep=S.inbox.length+S.respErrors.length,stk=sticky();
   const tasks=[
     [openCalls().length,'시공사 사과 전화 필요','bad',"showUrgent()"],
@@ -442,16 +442,16 @@ function rPartners(){
   const q=($('pq')?.value||'').toLowerCase(),fy=ui.stFilter||'',cities=[...new Set(S.companies.map(c=>regionOfLoc(c.city)).filter(Boolean))];
   let list=S.companies.filter(c=>(c.name+c.city+c.id).toLowerCase().includes(q));
   const rf=ui.rFilter;if(rf)list=list.filter(c=>regionOfLoc(c.city)===rf);
-  if(fy==='p25')list=list.filter(c=>c.hist[2025]?.done);
-  if(fy==='p25n26')list=list.filter(c=>c.hist[2025]?.done&&semOf(c));
-  if(fy==='p25x26')list=list.filter(c=>c.hist[2025]?.done&&!semOf(c));
-  if(fy==='new26')list=list.filter(c=>!c.hist[2025]?.done&&semOf(c));
+  if(fy==='hist')list=list.filter(c=>attendSummary(c).n>0);
+  if(fy==='rejoin')list=list.filter(c=>attendSummary(c).n>0&&attended(c,curY()));
+  if(fy==='lost')list=list.filter(c=>attendSummary(c).n>0&&!attended(c,curY()));
+  if(fy==='new')list=list.filter(c=>attendSummary(c).n===0&&attended(c,curY()));if(fy==='inv')list=list.filter(c=>c.invite);
   $('p-partners').innerHTML=`<div class="title-row"><div><h1>협력사 리스트</h1><div class="desc">작년 진행 여부와 올해 상태를 함께 봅니다. 행을 누르면 상세/수정.</div></div><div class="row"><button class="btn" onclick="importModalCo()">업체 목록 불러오기(CSV)</button><button class="btn" onclick="companyModal('')">+ 업체 추가</button></div></div>
   <div class="panel"><div class="ph"><div class="row"><input id="pq" placeholder="업체명·지역·고유번호" value="${esc(q)}" oninput="rPartners();$('pq').focus()">
    <select onchange="ui.rFilter=this.value;rPartners()"><option value="">전체 지역</option>${cities.map(c=>`<option ${rf===c?'selected':''}>${c}</option>`).join('')}</select>
-   <select onchange="ui.stFilter=this.value;rPartners()">${[['','전체'],['p25','작년(2025) 진행'],['p25n26','작년 진행 → 올해도 배정'],['p25x26','작년 진행 → 올해 미배정'],['new26','올해 신규']].map(o=>`<option value="${o[0]}" ${fy===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></div><span class="sub">${list.length}곳</span></div>
-  <div class="tw"><table><tr><th>협력사</th><th>고유번호</th><th>지역</th><th>2025</th><th>희망일 1·2·3</th><th>지정 담당자</th><th>올해 배정</th><th>상태</th><th></th></tr>
-  ${list.map(c=>{const s=semOf(c),h=c.hist[2025];return `<tr><td style="cursor:pointer" onclick="companyModal('${c.id}')"><b>${esc(c.name)}</b><div class="sub">${esc(c.address)}</div></td><td>${c.id}</td><td>${esc(c.city)}</td><td>${h?.done?'<span class="badge b-ok">진행 '+esc(h.date.slice(5))+'</span>':'<span class="badge">없음</span>'}</td><td>${c.prefs.map(d=>fmtD(d)).join('<br>')||'-'}</td>
+   <select onchange="ui.stFilter=this.value;rPartners()">${[['','전체'],['hist','지난 시즌 참석한 업체'],['rejoin','지난 참석 → 올해도 참석'],['lost','지난 참석 → 올해 미참석'],['new','올해 신규 참석'],['inv','초청세미나 업체']].map(o=>`<option value="${o[0]}" ${fy===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></div><span class="sub">${list.length}곳</span></div>
+  <div class="tw"><table><tr><th>협력사</th><th>고유번호</th><th>지역</th><th>참석 이력</th><th>희망일 1·2·3</th><th>지정 담당자</th><th>올해 배정</th><th>상태</th><th></th></tr>
+  ${list.map(c=>{const s=semOf(c);return `<tr><td style="cursor:pointer" onclick="companyModal('${c.id}')"><b>${esc(c.name)}</b><div class="sub">${esc(c.address)}</div></td><td>${c.id}</td><td>${esc(c.city)}</td><td>${attendCell(c)}</td><td>${c.prefs.map(d=>fmtD(d)).join('<br>')||'-'}</td>
   <td><select onchange="setFixed('${c.id}',this.value)" ${s&&s.status!=='proposed'?'disabled':''}><option value="">자동배정</option>${S.staff.map(p=>`<option value="${p.id}" ${c.fixedStaffId===p.id?'selected':''}>${esc(p.name)}</option>`).join('')}</select></td>
   <td>${s?fmtD(s.date)+' '+fmtT(s.start)+'<br>'+esc(sname(s.staffId)):'-'}</td><td>${badge(statusOf(c))}</td><td>${c.x?`<button class="btn sm" onclick="setX('${c.id}',false)">진행 복원</button>`:`<button class="btn sm bad" onclick="setX('${c.id}',true)">진행 안 함</button>`}</td></tr>`}).join('')}</table></div></div>`;
 }
@@ -490,7 +490,7 @@ function rMail(){
   $('p-mail').innerHTML=`<div class="title-row"><div><h1>메일·회신 관리</h1><div class="desc">① 구글폼 링크 메일 발송 → ② 회신 자동 취합 → ③ 자동배정. 이 시안에서는 발송·수집을 시뮬레이션합니다.</div></div></div>
   <div class="panel"><div class="ph">① 메일 발송 (지역/권역별 기간 자동 삽입)<span class="badge b-warn">실제 발송 연결 전</span></div><div class="pb">
    <div class="row"><select onchange="ui.mailZone=this.value;rMail()"><option value="">전체 권역</option>${S.zones.map(z=>`<option value="${z.id}" ${zsel===z.id?'selected':''}>${esc(z.name)}</option>`).join('')}</select><button class="btn pri" onclick="sendMails()" ${unsent.length?'':'disabled'}>미발송 ${unsent.length}곳에 발송(시뮬)</button></div></div>
-   <div class="tw"><table><tr><th>업체</th><th>권역/기간</th><th>발송</th><th>회신</th><th></th></tr>${S.companies.filter(c=>!c.x&&(!zsel||zoneFor(c.city)?.id===zsel)).map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.city)} · ${esc(periodText(c.city))}</td><td>${c.mail.sent?'<span class="badge b-ok">'+esc(c.mail.sentAt)+'</span>':'<span class="badge">미발송</span>'}</td><td>${c.prefs.length===3?'<span class="badge b-ok">회신 '+esc(c.mail.repliedAt||'')+'</span>':c.mail.sent?(isNoReply(c)?'<span class="badge b-bad">미회신</span>':'<span class="badge b-warn">대기</span>'):'-'}</td><td><a class="btn sm" href="mailto:${esc(c.email)}?subject=${encodeURIComponent(fillTpl(t.subject,c))}&body=${encodeURIComponent(fillTpl(t.body,c))}">메일 앱으로 열기</a></td></tr>`).join('')}</table></div></div>
+   <div class="tw"><table><tr><th>업체</th><th>권역/기간</th><th>발송</th><th>회신</th><th></th></tr>${S.companies.filter(c=>!c.x&&(!zsel||zoneFor(c.city)?.id===zsel)).map(c=>`<tr><td>${esc(c.name)}</td><td>${esc(c.city)} · ${esc(periodText(c.city))}</td><td>${c.mail.sent?'<span class="badge b-ok">'+esc(c.mail.sentAt)+'</span>':'<span class="badge">미발송</span>'}</td><td>${hasReplied(c)?'<span class="badge b-ok">회신 '+esc(c.mail.repliedAt||'')+'</span>':c.mail.sent?(isNoReply(c)?'<span class="badge b-bad">미회신</span>':'<span class="badge b-warn">대기</span>'):'-'}</td><td><a class="btn sm" href="mailto:${esc(c.email)}?subject=${encodeURIComponent(fillTpl(t.subject,c))}&body=${encodeURIComponent(fillTpl(t.body,c))}">메일 앱으로 열기</a></td></tr>`).join('')}</table></div></div>
   <div class="panel"><div class="ph">② 회신 자동 취합 <span><button class="btn pri" onclick="collect()">새 응답 확인 (${S.inbox.length}건 대기)</button></span></div><div class="pb">
    <p class="sub">구글폼 응답(시트)이 연결되면 이 버튼이 자동으로 동작합니다. 지금은 샘플 응답을 처리합니다. 처리 규칙: 업체 매칭 → 주소로 지역 인식 → 해당 권역 기간 검사 → 1·2·3순위 저장 → ${S.settings.autoAfterReply?'자동배정 실행':'(자동배정 꺼짐)'}</p>
    ${S.inbox.length?`<table><tr><th>수신</th><th>업체</th><th>인원</th><th>주소</th><th>1·2·3순위</th></tr>${S.inbox.map(r=>`<tr><td>${esc(r.at)}</td><td>${esc(r.name)}</td><td>${r.people}</td><td>${esc(r.address)}</td><td>${[r.d1,r.d2,r.d3].map(fmtD).join(', ')}</td></tr>`).join('')}</table>`:'<div class="sub">대기 중인 새 응답이 없습니다.</div>'}
@@ -543,7 +543,7 @@ function pasteResponses(){
 /* ---------- 신청 접수 ---------- */
 function rRequest(){
   $('p-request').innerHTML=`<div class="title-row"><div><h1>신청 접수 (직접 입력)</h1><div class="desc">구글폼 연동 전/예외 접수용입니다. 주소로 지역을 인식하고 해당 권역 기간을 검사합니다.</div></div></div>
-  <div class="panel"><div class="pb"><div class="fg"><div><label>시공사명 *</label><input id="rq1"></div><div><label>담당자명 *</label><input id="rq2"></div><div><label>연락처 *</label><input id="rq3"></div><div><label>참여 예정 인원 * (최소 3)</label><input type="number" id="rq4" min="3" value="3" oninput="$('rqMat').value=this.value+'부'"></div><div><label>준비자료 (자동)</label><input id="rqMat" value="3부" readonly></div></div>
+  <div class="panel"><div class="pb"><div class="fg"><div><label>시공사명 *</label><input id="rq1"></div><div><label>담당자명 *</label><input id="rq2"></div><div><label>연락처 *</label><input id="rq3"></div><div><label>참여 예정 인원 * (3명 미만은 초청세미나)</label><input type="number" id="rq4" min="1" value="3" oninput="$('rqMat').value=this.value+'부'"></div><div><label>준비자료 (자동)</label><input id="rqMat" value="3부" readonly></div><div><label style="display:flex;gap:6px;color:var(--ink)"><input type="checkbox" id="rqInv"> 초청세미나로 신청 (우리 사옥)</label><div class="sub">참석 인원이 3명 미만이면 자동으로 초청세미나가 됩니다</div></div></div>
    <div style="margin-top:12px"><label>고객사 사옥 주소 *</label><input id="rq5" style="width:100%" placeholder="예: 경기도 화성시 동탄대로 123" oninput="rqZone()"><div class="sub" id="rqZ"></div></div>
    <div class="fg" style="margin-top:12px">${[1,2,3].map(i=>`<div><label>${i}순위 희망일 *</label><input type="date" id="rd${i}"></div>`).join('')}<div><label>특정 담당자 고정 (선택)</label><select id="rq6"><option value="">자동배정</option>${S.staff.map(p=>`<option value="${p.id}">${esc(p.name)}</option>`).join('')}</select></div></div>
    <div class="row" style="justify-content:flex-end;margin-top:14px"><button class="btn pri" onclick="submitReq()">접수 저장 후 자동배정</button></div></div></div>`;
@@ -551,7 +551,7 @@ function rRequest(){
 function rqZone(){const c=cityOf($('rq5').value),z=c&&zoneFor(c);$('rqZ').textContent=c?(z?c+' · '+z.name+' · 가능 기간 '+z.start+' ~ '+z.end:c+' · 권역 기간 미설정'):'지역 인식 안 됨';if(z)[1,2,3].forEach(i=>{$('rd'+i).min=z.start;$('rd'+i).max=z.end})}
 function submitReq(){
   const v=i=>$(i).value.trim();
-  const e=applyResponse({name:v('rq1'),contact:v('rq2'),phone:v('rq3'),people:v('rq4'),address:v('rq5'),d1:v('rd1'),d2:v('rd2'),d3:v('rd3')});
+  const e=applyResponse({name:v('rq1'),contact:v('rq2'),phone:v('rq3'),people:v('rq4'),address:v('rq5'),d1:v('rd1'),d2:v('rd2'),d3:v('rd3'),invite:$('rqInv').checked});
   if(e.length)return alert('저장하지 못했습니다:\n- '+e.join('\n- '));
   if(v('rq6'))comp(S.companies.find(c=>c.name===v('rq1')).id).fixedStaffId=v('rq6');
   autoAssign();go('schedule');
@@ -704,6 +704,11 @@ function rSettings(){
    <div><label>당일 복귀 마감 시각</label><input type="time" value="${fmtT(s.returnLatest)}" onchange="S.settings.returnLatest=parseT(this.value)??1320;save()"></div>
    <div><label style="display:flex;gap:8px;color:var(--ink)"><input type="checkbox" ${s.allowOvernight?'checked':''} onchange="S.settings.allowOvernight=this.checked;save()"> 숙박 출장 허용 (당일 복귀 불가여도 배정, 경고 표시)</label></div>
    <div class="sub" style="grid-column:1/-1">장거리 출장일은 하루 1건이고 다른 일정과 함께 잡지 않습니다. 이동시간은 시·군 좌표 추정값이라 지도 API 연결 시 정확해집니다.</div></div></div>
+  <div class="panel"><div class="ph">시즌 · 초청세미나</div><div class="pb fg">
+   <div><label>올해 시즌 연도 (참석률 통계의 '올해')</label><input type="number" value="${curY()}" onchange="S.settings.curYear=+this.value||2027;renderAll()"></div>
+   <div><label>초청세미나 날짜 (쉼표, YYYY-MM-DD)</label><input value="${esc((s.inviteDates||[]).join(','))}" style="width:100%" onchange="S.settings.inviteDates=this.value.split(',').map(x=>x.trim()).filter(dayOK);save();renderAll()"></div>
+   <div><label>초청세미나 장소</label><input value="${esc(s.inviteVenue||'')}" onchange="S.settings.inviteVenue=this.value;save()"></div>
+   <div class="sub" style="grid-column:1/-1">방문 시작 시각은 아래 '배정 규칙'의 후보 시각(기본 10:00, 14:00)으로 배정합니다. 인원이 3명 미만이거나 방문이 어려운 업체는 초청세미나로 분류되어 방문 배정에서 제외됩니다.</div></div></div>
   <div class="panel"><div class="ph">자동화</div><div class="pb">
    <label style="display:flex;gap:8px;color:var(--ink)"><input type="checkbox" ${s.autoAfterReply?'checked':''} onchange="S.settings.autoAfterReply=this.checked;save()"> 회신 취합 즉시 자동배정</label>
    <label style="display:flex;gap:8px;color:var(--ink)"><input type="checkbox" ${s.autoConfirm?'checked':''} onchange="S.settings.autoConfirm=this.checked;save()"> 자동배정 결과를 관리자 승인 없이 바로 확정</label>
@@ -725,14 +730,14 @@ function importJson(el){const f=el.files[0];if(!f)return;const r=new FileReader(
 /* ---------- 회신 마감 / 미회신 ---------- */
 const todayKST=()=>new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Seoul'}).format(new Date());
 function deadlineFor(c){const z=zoneFor(c.city);return (z&&z.deadline)||S.settings.replyDeadline||''}
-function isNoReply(c){if(c.x||c.prefs.length===3||!c.mail.sent)return false;if(c.replyFlag==='noreply')return true;if(c.replyFlag==='keep')return false;const d=deadlineFor(c);return !!d&&todayKST()>d}
+function isNoReply(c){if(c.x||hasReplied(c)||!c.mail.sent)return false;if(c.replyFlag==='noreply')return true;if(c.replyFlag==='keep')return false;const d=deadlineFor(c);return !!d&&todayKST()>d}
 const daysBetween=(a,b)=>Math.round((Date.parse(b+'T00:00:00Z')-Date.parse(a+'T00:00:00Z'))/86400000);
 function rNoReply(){
-  const t=todayKST(),all=S.companies.filter(c=>!c.x&&c.mail.sent&&c.prefs.length!==3),nr=all.filter(isNoReply),wait=all.filter(c=>!isNoReply(c));
+  const t=todayKST(),all=S.companies.filter(c=>!c.x&&c.mail.sent&&!hasReplied(c)),nr=all.filter(isNoReply),wait=all.filter(c=>!isNoReply(c));
   const row=c=>{const d=deadlineFor(c);return `<tr><td><b>${esc(c.name)}</b><div class="sub">${esc(c.address)}</div></td><td>${esc(c.city)}</td><td>${esc(c.rep||'')}</td><td>${esc(c.phone||'-')}</td><td>${esc(c.mail.sentAt||'')}${c.mail.resend?'<div class="sub">재발송 '+c.mail.resend+'회</div>':''}</td><td>${c.mail.sentAt?daysBetween(c.mail.sentAt,t)+'일':'-'}</td><td>${esc(d||'-')}</td>`};
   $('p-noreply').innerHTML=`<div class="title-row"><div><h1>미회신 업체</h1><div class="desc">메일을 보냈지만 회신하지 않은 업체입니다. 회신 마감일이 지나면 자동으로 여기에 모이고, 마감일은 언제든 바꿀 수 있습니다. <b>미회신 업체는 올해 배정 대상이 아닙니다.</b></div></div><div class="row"><button class="btn" onclick="exportNoReply()">미회신 목록 CSV</button></div></div>
   <div class="panel"><div class="pb row"><label style="margin:0">기본 회신 마감일</label><input type="date" value="${esc(S.settings.replyDeadline||'')}" onchange="S.settings.replyDeadline=this.value;renderAll()"><span class="sub">권역별 마감일은 설정 화면에서 따로 지정할 수 있습니다. 오늘: ${t}</span></div></div>
-  <div class="kpis"><div class="kpi"><span>메일 발송</span><strong>${S.companies.filter(c=>c.mail.sent).length}</strong></div><div class="kpi"><span>회신 완료</span><strong>${S.companies.filter(c=>c.prefs.length===3).length}</strong></div><div class="kpi"><span>미회신</span><strong>${nr.length}</strong></div><div class="kpi"><span>마감 전 대기</span><strong>${wait.length}</strong></div></div>
+  <div class="kpis"><div class="kpi"><span>메일 발송</span><strong>${S.companies.filter(c=>c.mail.sent).length}</strong></div><div class="kpi"><span>회신 완료</span><strong>${S.companies.filter(hasReplied).length}</strong></div><div class="kpi"><span>미회신</span><strong>${nr.length}</strong></div><div class="kpi"><span>마감 전 대기</span><strong>${wait.length}</strong></div></div>
   <div class="panel"><div class="ph">미회신 (${nr.length})</div><div class="tw"><table><tr><th>업체</th><th>지역</th><th>대표자</th><th>연락처</th><th>발송일</th><th>경과</th><th>마감일</th><th>사유</th><th>전화 연락</th><th>메모</th><th></th></tr>${nr.map(c=>row(c)+`<td>${c.replyFlag==='noreply'?'수동 처리':'마감 경과'}</td><td><label style="display:flex;gap:4px;color:var(--ink);font-size:13px"><input type="checkbox" ${c.callChecked?'checked':''} onchange="toggleCall('${c.id}',this.checked)">${c.callChecked?esc(c.callChecked):'미연락'}</label></td><td><input value="${esc(c.memo||'')}" placeholder="메모" onchange="setMemo('${c.id}',this.value)"></td><td><div class="row"><button class="btn sm" onclick="resendOne('${c.id}')">재발송(시뮬)</button><button class="btn sm" onclick="keepWait('${c.id}')">대기로 복귀</button></div></td></tr>`).join('')||'<tr><td colspan=11 class="sub">미회신 업체가 없습니다.</td></tr>'}</table></div></div>
   <div class="panel"><div class="ph">마감 전 회신 대기 (${wait.length})</div><div class="tw"><table><tr><th>업체</th><th>지역</th><th>대표자</th><th>연락처</th><th>발송일</th><th>경과</th><th>마감일</th><th></th></tr>${wait.map(c=>row(c)+`<td><button class="btn sm bad" onclick="forceNoReply('${c.id}')">미회신 처리</button></td></tr>`).join('')||'<tr><td colspan=8 class="sub">없음</td></tr>'}</table></div></div>`;
 }
@@ -802,7 +807,7 @@ function rAudit(){
 function exportAudit(){dl('수정내역_'+todayKST()+'.csv',toCsv([['시각','작성자','구분','항목','대상','필드','이전','이후']].concat((S.audit||[]).map(x=>[x.at,x.who,x.kind,x.col,x.target,x.field,x.before,x.after]))))}
 function exportAll(){
   const t=todayKST();
-  dl('업체현황_'+t+'.csv',toCsv([['고유번호','업체명','대표자','지역','주소','연락처','상태','메일발송일','회신일','희망1','희망2','희망3','배정일','배정시각','담당자','지정담당자','2025진행','2025진행일','2025수주','올해수주','전화체크','메모','비고']].concat(S.companies.map(c=>{const s=semOf(c),h=c.hist[2025]||{};return [c.id,c.name,c.rep||'',c.city,c.address,c.phone||'',statusOf(c),c.mail.sentAt,c.mail.repliedAt,c.prefs[0]||'',c.prefs[1]||'',c.prefs[2]||'',s?s.date:'',s?fmtT(s.start):'',s?sname(s.staffId):'',c.fixedStaffId?sname(c.fixedStaffId):'',h.done?'Y':'N',h.date||'',h.order||0,c.hist[CUR]?c.hist[CUR].order||0:0,c.callChecked||'',c.memo||'',c.note||'']}))));
+  dl('업체현황_'+t+'.csv',toCsv([['고유번호','업체명','대표자','지역','주소','연락처','상태','초청세미나','메일발송일','회신일','희망1','희망2','희망3','배정일','배정시각','담당자','지정담당자','참석횟수','대상횟수','참석률','전화체크','메모','비고']].concat(S.companies.map(c=>{const s=semOf(c),a=attendSummary(c);return [c.id,c.name,c.rep||'',c.city,c.address,c.phone||'',statusOf(c),c.invite?'Y':'',c.mail.sentAt,c.mail.repliedAt,c.prefs[0]||'',c.prefs[1]||'',c.prefs[2]||'',s?s.date:'',s?fmtT(s.start):'',s?sname(s.staffId):'',c.fixedStaffId?sname(c.fixedStaffId):'',a.n,a.d,a.d?Math.round(a.rate*100)+'%':'',c.callChecked||'',c.memo||'',c.note||'']}))));
   dl('배정현황_'+t+'.csv',toCsv([['업체','일자','시작','종료','담당자','지역','상태','희망순위','이동분','비고']].concat(S.seminars.map(s=>[cname(s.companyId),s.date,fmtT(s.start),fmtT(s.end),sname(s.staffId),s.city,s.status,s.rank+1,s.travel,s.note||'']))));
   dl('불가_전화목록_'+t+'.csv',toCsv([['구분','업체','담당자','사유','시각','처리']].concat(S.declines.map(d=>['담당자 불가',cname(d.companyId),sname(d.staffId),d.reason,d.at,d.revoked?'철회':'']),S.calls.map(k=>['사과 전화',cname(k.companyId),'',k.reason,k.at,k.done?'완료':'필요']))));
   exportAudit();
@@ -810,7 +815,7 @@ function exportAll(){
 
 /* ---------- 테스트 도구 ---------- */
 function simReplies(pct){
-  let n=0;S.companies.forEach(c=>{if(c.x||!c.mail.sent||c.prefs.length===3||Math.random()*100>=pct)return;const z=zoneFor(c.city);if(!z)return;const wd=weekdays(z.start,z.end).filter(d=>!(S.settings.holidays||[]).includes(d));if(wd.length<3)return;c.prefs=[...wd].sort(()=>Math.random()-.5).slice(0,3);c.mail.replied=true;c.mail.repliedAt=now().slice(0,10);c.replyFlag='';n++});
+  let n=0;S.companies.forEach(c=>{if(c.x||!c.mail.sent||hasReplied(c)||Math.random()*100>=pct)return;const z=zoneFor(c.city);if(!z)return;const wd=weekdays(z.start,z.end).filter(d=>!(S.settings.holidays||[]).includes(d));if(wd.length<3)return;c.prefs=[...wd].sort(()=>Math.random()-.5).slice(0,3);c.mail.replied=true;c.mail.repliedAt=now().slice(0,10);c.replyFlag='';n++});
   if(n)autoAssign();logit('테스트: 임의 회신 '+n+'곳');renderAll();toast('임의 회신 '+n+'곳 반영 · 자동배정 실행');
 }
 function simDeclines(n){
@@ -872,7 +877,8 @@ function setupItems(){
    {g:'A',k:'a6',t:'휴무일·공휴일 입력',d:'기본: 12/25, 1/1. 세미나 기간 안의 휴무일을 모두 넣으세요',tag:'앱 안에서',go:"go('settings')",btn:'설정'},
    {g:'A',k:'a7',t:'연락처 없는 업체 연락처 입력 (지온산업·스타건설)',d:'입력 전까지 알람이 계속 뜹니다',tag:'앱 안에서',auto:S.companies.some(c=>c.alertPhone)&&sticky().length===0,go:"go('partners')",btn:'협력사'},
    {g:'A',k:'a8',t:'메일 문구 확정 + 신청(구글폼) 링크 입력',d:'메일·회신 → 메일 양식 / 신청 링크',tag:'앱 안에서',go:"go('mail')",btn:'메일'},
-   {g:'A',k:'a9',t:'2025년 진행 업체·수주액 입력',d:'통계·이력 → 과거 업체 불러오기 (전환율 계산용)',tag:'앱 안에서',go:"go('stats')",btn:'통계'},
+   {g:'A',k:'a9',t:'지난 시즌 이력 불러오기 (구글시트 CSV)',d:'통계·참석률 → 지난 시즌 이력 불러오기. 업체별·연도별 참석률 계산에 쓰입니다',tag:'앱 안에서',go:"go('stats');importSeasonModal()",btn:'불러오기'},
+   {g:'A',k:'a12',t:'초청세미나 날짜·장소 설정',d:'설정 → 시즌·초청세미나. 인원 3명 미만 업체는 우리 사옥 초청세미나로 분류됩니다',tag:'앱 안에서',go:"go('settings')",btn:'설정'},
    {g:'B',k:'b1',t:'구글폼 만들기 + 응답 구글시트 연결',d:'폼 항목: 시공사명 · 담당자명 · 연락처 · 참여 인원 · 사옥 주소 · 희망일 1·2·3순위. 시트 주소를 설정에 입력',tag:'외부 연동',go:"go('settings')",btn:'설정'},
    {g:'B',k:'b2',t:'메일 실제 발송 연결',d:'발송 방식(Gmail 등)과 발신 계정을 정해야 합니다',tag:'외부 연동'},
    {g:'A',k:'a10',t:'담당자 기존 일정 연동 (자동 동기화) 확인',d:'담당자 관리 화면 맨 위: 연결됨 표시와 읽은 일정 수 확인',tag:'앱 안에서',auto:EXT.ok&&EXT.last>0,go:"go('staff')",btn:'담당자'},
@@ -1004,7 +1010,174 @@ function extInit(){
 }
 
 
-S=load();resnap();renderAll();extInit();if(openCalls().length)showUrgent();sticky().forEach(c=>toast('📞 연락처 없음: '+c.name+' — 입력 전까지 계속 알립니다'));
+/* ================= v4: 초청세미나 · 참석률 · 시즌 이력 · 1순위 우선 배정 ================= */
+const curY=()=>S.settings.curYear||2027;
+const hasReplied=c=>!!(c.mail&&c.mail.replied)||(c.prefs&&c.prefs.length===3);
+function migrate(){
+  const s=S.settings;s.curYear=s.curYear||2027;s.inviteDates=s.inviteDates||[];s.inviteVenue=s.inviteVenue||'푸어 사옥';
+  if(JSON.stringify(s.slots)==='[540,600,660,780,840,900,960]')s.slots=[600,840];
+  S.companies.forEach(c=>{c.invite=!!c.invite;c.inviteDate=c.inviteDate||'';c.hist=c.hist||{}});
+}
+/* 연도별 이력 정규화: {invited,replied,type('' | visit | invite),rank,date,staff,time,people,order} */
+function H(c,y){
+  if(y===curY()){
+    const s=semOf(c),inv=c.invite&&hasReplied(c);
+    return {invited:!!(c.mail&&c.mail.sent),replied:hasReplied(c),type:inv?'invite':(s&&s.status!=='proposed'?'visit':''),rank:s?s.rank:null,date:inv?c.inviteDate:(s?s.date:''),staff:s?sname(s.staffId):'',time:s?fmtT(s.start):'',people:c.people,order:(c.hist[y]&&c.hist[y].order)||0,live:true};
+  }
+  const h=(c.hist&&c.hist[y])||{};const type=h.type||(h.done?'visit':'');
+  return {invited:h.invited!=null?!!h.invited:!!(type||h.replied||h.done),replied:!!(h.replied||type),type,rank:h.rank==null?null:h.rank,date:h.date||'',staff:h.staff||'',time:h.time||'',people:h.people||'',order:h.order||0};
+}
+const attended=(c,y)=>{const h=H(c,y);return !!h.type};
+function yearsList(){const ys=new Set();S.companies.forEach(c=>Object.keys(c.hist||{}).forEach(y=>{const h=c.hist[y]||{};if(h.invited||h.type||h.done||h.replied)ys.add(+y)}));return [...ys].filter(y=>y!==curY()).sort()}
+function attendSummary(c){const ys=yearsList(),inv=ys.filter(y=>H(c,y).invited),att=inv.filter(y=>attended(c,y));return {n:att.length,d:inv.length,rate:inv.length?att.length/inv.length:null}}
+function chip(c,y){const h=H(c,y);if(!h.invited&&!h.replied&&!h.type)return '<span class="sub">–</span>';return h.type==='visit'?'<span class="badge b-ok" title="방문 세미나 참석">방문</span>':h.type==='invite'?'<span class="badge b-pri" title="초청세미나 참석">초청</span>':h.replied?'<span class="badge b-warn" title="신청했으나 미확정">신청만</span>':'<span class="badge" title="대상이었으나 미신청">미신청</span>'}
+function attendCell(c){const ys=yearsList(),a=attendSummary(c);if(!ys.length)return '<span class="sub">이력 없음</span>';return ys.slice(-3).map(y=>'<div style="white-space:nowrap"><span class="sub">'+y+'</span> '+chip(c,y)+'</div>').join('')+(a.d?'<div class="sub">참석률 '+a.n+'/'+a.d+' ('+Math.round(a.rate*100)+'%)</div>':'')}
+const pctn=(a,b)=>b?Math.round(a/b*1000)/10+'%':'-';
+
+/* ---------- 1순위 우선 배정 (순위별 단계 배정) ---------- */
+function planPass(targets,base,rank){
+  let beam=[{items:[],cost:0}];
+  targets=[...targets].sort((a,b)=>(!!b.fixedStaffId)-(!!a.fixedStaffId));
+  for(const c of targets){const next=[],date=c.prefs[rank];if(!date)continue;
+    for(const stt of beam){next.push(stt);
+      for(const p of S.staff)for(const t of slots()){
+        const cand=candidateFor(c,date,t),all=[...base,...stt.items],r=check(cand,p,all);if(!r.ok)continue;
+        const load=all.filter(s=>s.staffId===p.id).length;
+        next.push({items:[...stt.items,{...cand,staffId:p.id,rank,travel:r.travel,legs:r.legs,warns:r.warnings}],cost:stt.cost+r.travel+load*25});
+      }}
+    beam=next.sort((a,b)=>b.items.length-a.items.length||a.cost-b.cost).slice(0,40);}
+  return beam[0].items;
+}
+function plan(targets,base){
+  let items=[];
+  for(let rank=0;rank<3;rank++){
+    const t=targets.filter(c=>c.prefs[rank]&&!items.some(i=>i.companyId===c.id));
+    if(t.length)items=items.concat(planPass(t,[...base,...items],rank));
+  }
+  return items;
+}
+
+/* ---------- 신청 처리: 3명 미만/희망 시 초청세미나 ---------- */
+const _applyOld=applyResponse;
+applyResponse=function(r){
+  const ppl=+r.people,inv=!!r.invite||(ppl>=1&&ppl<3),name=String(r.name||'').trim();
+  if(!inv)return _applyOld(r);
+  const errs=[];if(!name)errs.push('업체명 없음');if(!(ppl>=1))errs.push('인원 확인 필요');if(errs.length)return errs;
+  let c=S.companies.find(x=>x.name===name);
+  if(!c){const addr=String(r.address||'').trim();c={id:'HS-'+String(S.companies.length+1).padStart(4,'0'),name,city:locOf(addr),address:addr,x:false,fixedStaffId:'',contact:'',phone:'',email:'',people:ppl,rep:'',replyFlag:'',callChecked:'',memo:'',mail:{sent:false,sentAt:'',replied:false,repliedAt:'',resend:0},prefs:[],hist:{},invite:true,inviteDate:''};S.companies.push(c);logit('미등록 업체 신규 등록: '+name)}
+  c.people=ppl;c.contact=r.contact||c.contact;c.phone=r.phone||c.phone;c.invite=true;c.mail.replied=true;c.mail.repliedAt=now().slice(0,10);c.replyFlag='';
+  const ds=[r.d1,r.d2,r.d3].filter(dayOK),idates=S.settings.inviteDates||[];
+  c.inviteDate=ds.find(d=>idates.includes(d))||idates[0]||ds[0]||'';
+  S.seminars.forEach(s=>{if(s.companyId===c.id&&['proposed','confirmed'].includes(s.status))s.status='cancelled'});
+  return [];
+};
+function inviteHtml(){
+  const l=S.companies.filter(c=>c.invite&&hasReplied(c)&&!c.x),dates=[...new Set(l.map(c=>c.inviteDate||'미정'))].sort();
+  return `<div class="panel" style="margin-top:14px"><div class="ph">🏢 초청세미나 (${esc(S.settings.inviteVenue)}) <span class="sub">${l.length}곳 · 참석 3명 미만이거나 방문이 어려운 업체는 우리 사옥에서 진행</span></div><div class="tw" style="max-height:none"><table style="min-width:0"><tr><th>날짜</th><th>업체</th><th>인원</th><th>연락처</th><th></th></tr>${dates.map(d=>l.filter(c=>(c.inviteDate||'미정')===d).map((c,i,a)=>`<tr><td>${i===0?'<b>'+(dayOK(d)?fmtD(d):'날짜 미정')+'</b> <span class="sub">('+a.length+'곳)</span>':''}</td><td>${esc(c.name)}</td><td>${c.people}명</td><td>${esc(c.phone||'-')}</td><td><select onchange="setInviteDate('${c.id}',this.value)"><option value="">날짜 미정</option>${(S.settings.inviteDates||[]).map(x=>`<option value="${x}" ${c.inviteDate===x?'selected':''}>${fmtD(x)}</option>`).join('')}</select></td></tr>`).join('')).join('')||'<tr><td colspan=5 class="sub">초청세미나 업체가 없습니다. 인원 3명 미만 신청은 자동으로 여기에 모입니다.</td></tr>'}</table></div></div>`;
+}
+function setInviteDate(id,v){comp(id).inviteDate=v;renderAll()}
+const _rSchedOld=rSchedule;
+rSchedule=function(){_rSchedOld();$('p-schedule').insertAdjacentHTML('beforeend',inviteHtml())};R.schedule=rSchedule;
+
+/* ---------- 업체 상세 (초청세미나 · 연도별 이력) ---------- */
+function companyModal(id){
+  const c=id?comp(id):{id:'',name:'',city:'',address:'',people:3,contact:'',phone:'',email:'',rep:'',prefs:['','',''],hist:{},mail:{},invite:false,inviteDate:''};
+  const p=c.prefs.length?c.prefs:['','',''],ys=[...new Set([...yearsList(),curY()-1])].sort();
+  openModal(id?c.name+' 상세':'업체 추가',`<div class="fg"><div><label>업체명</label><input id="cn" value="${esc(c.name)}"></div><div><label>대표자</label><input id="cr" value="${esc(c.rep||'')}"></div><div><label>담당자</label><input id="cc" value="${esc(c.contact)}"></div><div><label>연락처</label><input id="cp" value="${esc(c.phone)}"></div><div><label>이메일</label><input id="ce" value="${esc(c.email)}"></div><div><label>참석 인원</label><input type="number" id="cpp" min="1" value="${c.people}"></div></div>
+  <div style="margin-top:10px"><label>주소 (시·군 이름이 들어가야 지역이 인식됩니다)</label><input id="ca" style="width:100%" value="${esc(c.address)}"></div>
+  <div class="fg" style="margin-top:10px">${[0,1,2].map(i=>`<div><label>${i+1}순위 희망일</label><input type="date" id="cd${i}" value="${esc(p[i]||'')}"></div>`).join('')}</div>
+  <div class="row" style="margin-top:12px"><label style="display:flex;gap:6px;margin:0;color:var(--ink)"><input type="checkbox" id="cinv" ${c.invite?'checked':''}> 초청세미나로 진행 (${esc(S.settings.inviteVenue)})</label><select id="cinvd"><option value="">초청 날짜 미정</option>${(S.settings.inviteDates||[]).map(x=>`<option value="${x}" ${c.inviteDate===x?'selected':''}>${fmtD(x)}</option>`).join('')}</select></div>
+  <h4>연도별 참석 이력 <span class="sub">(수정하면 참석률에 바로 반영됩니다)</span></h4>
+  <div class="tw" style="max-height:none"><table style="min-width:0"><tr><th>연도</th><th>대상</th><th>참석</th><th>날짜</th><th>담당자</th><th>수주액(백만원)</th></tr>${ys.map(y=>{const h=H({...c,mail:c.mail||{},prefs:c.prefs||[],hist:c.hist||{}},y);return `<tr><td>${y}</td><td><input type="checkbox" id="hi${y}" ${h.invited?'checked':''}></td><td><select id="ht${y}"><option value="">미참석</option><option value="visit" ${h.type==='visit'?'selected':''}>방문 세미나</option><option value="invite" ${h.type==='invite'?'selected':''}>초청세미나</option></select></td><td><input type="date" id="hd${y}" value="${esc(h.date||'')}"></td><td><input id="hs${y}" value="${esc(h.staff||'')}" style="width:90px"></td><td><input type="number" id="ho${y}" value="${h.order||0}" style="width:90px"></td></tr>`}).join('')}</table></div>
+  <div class="sub" style="margin-top:6px">올해(${curY()}) 시즌의 참석은 배정 확정·초청세미나 신청에서 자동으로 계산됩니다.</div>
+  <div class="row" style="justify-content:flex-end;margin-top:14px"><button class="btn" onclick="closeModal()">닫기</button><button class="btn pri" onclick="saveCompany('${id}','${ys.join(',')}')">저장</button></div>`,true);
+}
+function saveCompany(id,yl){
+  const v=x=>$(x).value.trim(),name=v('cn'),addr=v('ca'),ppl=+v('cpp'),prefs=[0,1,2].map(i=>v('cd'+i)).filter(Boolean),inv=$('cinv').checked;
+  if(!name||(!addr&&!inv)||!(ppl>=1))return alert('업체명, 주소(초청세미나는 생략 가능), 인원을 확인하세요.');
+  if(prefs.length&&(prefs.length!==3||new Set(prefs).size!==3||!prefs.every(dayOK)))return alert('희망일은 비우거나, 서로 다른 날짜 3개를 모두 입력하세요.');
+  let c=id?comp(id):null;if(!c){c={id:'HS-'+String(S.companies.length+1).padStart(4,'0'),x:false,fixedStaffId:'',replyFlag:'',callChecked:'',memo:'',mail:{sent:false,sentAt:'',replied:false,repliedAt:'',resend:0},prefs:[],hist:{}};S.companies.push(c)}
+  Object.assign(c,{name,address:addr,city:locOf(addr),rep:v('cr'),contact:v('cc'),phone:v('cp'),email:v('ce'),people:ppl,invite:inv,inviteDate:v('cinvd')});
+  if(JSON.stringify(c.prefs)!==JSON.stringify(prefs)){c.prefs=prefs;S.seminars=S.seminars.filter(s=>!(s.companyId===c.id&&s.status==='proposed'));if(prefs.length)c.mail.replied=true}
+  if(inv){c.mail.replied=true;S.seminars.forEach(s=>{if(s.companyId===c.id&&['proposed','confirmed'].includes(s.status))s.status='cancelled'})}
+  for(const y of String(yl||'').split(',').filter(Boolean)){
+    if(!$('ht'+y))continue;const type=$('ht'+y).value,old=c.hist[y]||{};
+    c.hist[y]={...old,invited:$('hi'+y).checked||!!type,type,done:undefined,date:$('hd'+y).value,staff:$('hs'+y).value.trim(),order:+$('ho'+y).value||0,replied:old.replied||!!type};
+  }
+  if(!c.city&&addr)alert('주소에서 지역을 찾지 못했습니다. 시·군 이름을 포함해 주세요. (배정 불가 사유가 됩니다)');
+  closeModal();logit('업체 저장: '+name);renderAll();
+}
+
+/* ---------- 통계 · 참석률 ---------- */
+function yearRow(y,cs){const inv=cs.filter(c=>H(c,y).invited),rep=inv.filter(c=>H(c,y).replied||H(c,y).type),vis=inv.filter(c=>H(c,y).type==='visit'),ivt=inv.filter(c=>H(c,y).type==='invite'),att=vis.length+ivt.length;return {y,inv:inv.length,rep:rep.length,vis:vis.length,ivt:ivt.length,att,rate:inv.length?att/inv.length:null}}
+function rStats(){
+  const cs=S.companies,ys=yearsList(),cy=curY(),all=[...ys,cy],rows=all.map(y=>yearRow(y,cs));
+  const sel=ui.statYear&&all.includes(ui.statYear)?ui.statYear:(ys.length?ys[ys.length-1]:cy),q=(ui.statQ||'').toLowerCase(),flt=ui.statF||'';
+  const regs=[...new Set(cs.map(c=>regionOfLoc(c.city)).filter(Boolean))].sort();
+  let list=cs.map(c=>({c,a:attendSummary(c)})).filter(x=>(x.c.name+x.c.city).toLowerCase().includes(q));
+  if(flt==='zero')list=list.filter(x=>x.a.d&&x.a.n===0);if(flt==='full')list=list.filter(x=>x.a.d&&x.a.n===x.a.d);if(flt==='inv')list=list.filter(x=>x.c.invite);
+  list.sort((a,b)=>(b.a.rate==null?-1:b.a.rate)-(a.a.rate==null?-1:a.a.rate)||a.c.name.localeCompare(b.c.name));
+  const last=rows.filter(r=>r.y!==cy&&r.inv).slice(-1)[0],tot=rows.filter(r=>r.y!==cy).reduce((a,r)=>({inv:a.inv+r.inv,att:a.att+r.att}),{inv:0,att:0});
+  const sent=cs.filter(c=>c.mail.sent),rep=sent.filter(hasReplied),asg=cs.filter(c=>semOf(c)||(c.invite&&hasReplied(c))),cf=cs.filter(c=>attended(c,cy)),dn=cs.filter(c=>semOf(c)&&semOf(c).status==='done');
+  const orderRate=y=>{const l=cs.filter(c=>attended(c,y));return pctn(l.filter(c=>H(c,y).order>0).length,l.length)};
+  $('p-stats').innerHTML=`<div class="title-row"><div><h1>통계·참석률</h1><div class="desc">업체마다 몇 해 중 몇 번 참석했는지, 매년 전체 참석률이 어떻게 변하는지 봅니다. 참석 = 방문 세미나 + 초청세미나, 참석률 = 참석 업체 ÷ 그해 대상(발송) 업체.</div></div><div class="row"><button class="btn" onclick="exportCsv()">CSV 내려받기</button><button class="btn pri" onclick="importSeasonModal()">지난 시즌 이력 불러오기(구글시트 CSV)</button></div></div>
+  <div class="kpis"><div class="kpi"><span>${last?last.y+'년 전체 참석률':'지난 시즌 참석률'}</span><strong>${last?pctn(last.att,last.inv):'-'}</strong></div><div class="kpi"><span>${last?last.y+'년 참석 / 대상':'참석 / 대상'}</span><strong>${last?last.att+' / '+last.inv:'-'}</strong></div><div class="kpi"><span>누적 평균 참석률</span><strong>${pctn(tot.att,tot.inv)}</strong></div><div class="kpi"><span>올해(${cy}) 현재 참석 확정</span><strong>${cf.length}</strong></div></div>
+  <div class="panel"><div class="ph">연도별 전체 참석률</div><div class="tw" style="max-height:none"><table style="min-width:0"><tr><th>연도</th><th>대상(발송)</th><th>신청</th><th>신청률</th><th>방문 참석</th><th>초청 참석</th><th>참석 합계</th><th><b>참석률</b></th><th>신청 대비 참석</th><th>수주 발생(참석 중)</th></tr>${rows.map(r=>`<tr><td><b>${r.y}</b>${r.y===cy?' <span class="badge b-pri">올해·진행 중</span>':''}</td><td>${r.inv}</td><td>${r.rep}</td><td>${pctn(r.rep,r.inv)}</td><td>${r.vis}</td><td>${r.ivt}</td><td>${r.att}</td><td><b>${pctn(r.att,r.inv)}</b></td><td>${pctn(r.att,r.rep)}</td><td>${orderRate(r.y)}</td></tr>`).join('')}</table></div>${ys.length?'':'<div class="pb sub">지난 시즌 이력이 없습니다. [지난 시즌 이력 불러오기]로 구글시트(CSV)를 넣으면 연도별 참석률이 계산됩니다.</div>'}</div>
+  <div class="panel"><div class="ph">올해(${cy}) 진행 단계별 전환</div><div class="tw" style="max-height:none"><table style="min-width:0"><tr><th>단계</th><th>업체 수</th><th>직전 단계 대비</th><th>메일 발송 대비</th></tr>${[['메일 발송',sent.length],['회신',rep.length],['배정·초청 확정 대상',asg.length],['참석 확정',cf.length],['진행 완료',dn.length]].map((r,i,a)=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${i?pctn(r[1],a[i-1][1]):'-'}</td><td>${pctn(r[1],sent.length)}</td></tr>`).join('')}</table></div></div>
+  <div class="panel"><div class="ph">지역별 참석률 <select onchange="ui.statYear=+this.value;rStats()">${all.map(y=>`<option value="${y}" ${y===sel?'selected':''}>${y}년${y===cy?' (진행 중)':''}</option>`).join('')}</select></div><div class="tw" style="max-height:340px"><table style="min-width:0"><tr><th>지역</th><th>대상</th><th>신청</th><th>참석</th><th>참석률</th></tr>${regs.map(g=>{const r=yearRow(sel,cs.filter(c=>regionOfLoc(c.city)===g));return `<tr><td>${esc(g)}</td><td>${r.inv}</td><td>${r.rep}</td><td>${r.att}</td><td>${pctn(r.att,r.inv)}</td></tr>`}).join('')}</table></div></div>
+  <div class="panel"><div class="ph">업체별 참석 이력 <div class="row"><input placeholder="업체명·지역 검색" value="${esc(ui.statQ||'')}" onchange="ui.statQ=this.value;rStats()"><select onchange="ui.statF=this.value;rStats()">${[['','전체'],['full','매번 참석'],['zero','한 번도 참석 안 함'],['inv','초청세미나 업체']].map(o=>`<option value="${o[0]}" ${flt===o[0]?'selected':''}>${o[1]}</option>`).join('')}</select></div></div><div class="tw"><table><tr><th>업체</th><th>지역</th>${all.map(y=>`<th>${y}</th>`).join('')}<th>참석률</th></tr>${list.slice(0,400).map(({c,a})=>`<tr style="cursor:pointer" onclick="companyModal('${c.id}')"><td><b>${esc(c.name)}</b>${c.invite?' <span class="badge b-pri">초청</span>':''}</td><td>${esc(c.city)}</td>${all.map(y=>`<td>${chip(c,y)}</td>`).join('')}<td>${a.d?'<b>'+Math.round(a.rate*100)+'%</b> <span class="sub">'+a.n+'/'+a.d+'</span>':'-'}</td></tr>`).join('')||'<tr><td colspan=9 class="sub">해당 업체가 없습니다.</td></tr>'}</table></div></div>`;
+}
+function exportCsv(){
+  const ys=[...yearsList(),curY()];
+  dl('참석이력_'+todayKST()+'.csv',toCsv([['업체','지역','초청세미나',...ys.flatMap(y=>[y+' 참석',y+' 날짜',y+' 담당',y+' 수주']),'참석','대상','참석률']].concat(S.companies.map(c=>{const a=attendSummary(c);return [c.name,c.city,c.invite?'Y':'',...ys.flatMap(y=>{const h=H(c,y);return [h.type==='visit'?'방문':h.type==='invite'?'초청':h.replied?'신청만':h.invited?'미신청':'',h.date,h.staff,h.order]}),a.n,a.d,a.d?Math.round(a.rate*100)+'%':'']}))));
+  const y=ys.slice(-2)[0];void y;
+}
+/* 연도·참석 한 줄 입력 */
+function importModal(){openModal('과거 진행 업체 한 줄씩 붙여넣기',`<p class="sub">한 줄에 한 업체: <code>업체명,방문|초청,진행일(YYYY-MM-DD),담당자,인원,수주액</code> (엑셀에서 복사 가능)</p><div class="row"><label style="margin:0">연도</label><input type="number" id="impY" value="${curY()-1}" style="width:90px"></div><textarea id="impT"></textarea><div class="row" style="justify-content:flex-end;margin-top:10px"><button class="btn pri" onclick="doImport()">불러오기</button></div>`)}
+function doImport(){
+  const y=+$('impY').value;if(!(y>2000))return alert('연도를 확인하세요.');let n=0;
+  $('impT').value.split('\n').map(l=>l.trim()).filter(Boolean).forEach(l=>{const p=l.split(/[,\t]/).map(x=>x.trim());if(!p[0])return;const c=S.companies.find(x=>nameKey(x.name)===nameKey(p[0]));if(!c)return;
+    c.hist[y]={invited:true,replied:true,type:/초청/.test(p[1]||'')?'invite':'visit',date:dayOK(p[2])?p[2]:'',staff:p[3]||'',people:+p[4]||c.people,order:+p[5]||0};n++});
+  closeModal();logit(y+' 이력 불러오기 '+n+'건');renderAll();toast(n+'곳 반영');
+}
+
+/* ---------- 지난 시즌 이력: 구글시트(CSV) 불러오기 ---------- */
+const nameKey=s=>String(s||'').replace(/\(주\)|㈜|주식회사|\(유\)|유한회사|\(합\)|\s|\//g,'').toLowerCase();
+function parseKDate(s){const m=/(\d{4})\.\s*(\d{1,2})\.\s*(\d{1,2})/.exec(String(s||''));if(!m)return '';const d=m[1]+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[3]).padStart(2,'0');return dayOK(d)?d:''}
+function parsePeople(s){const m=/\d+/.exec(String(s||''));return m?+m[0]:0}
+function importSeasonModal(){openModal('지난 시즌 이력 불러오기 (구글시트 CSV)',`<p class="sub">구글시트에서 <b>파일 → 다운로드 → 쉼표로 구분된 값(.csv)</b>으로 저장한 파일을 선택하세요. 열 이름은 시트 그대로(시공사명, 연락처, 희망일자 1순위~3순위, 참여 예정 인원, 고객사 사옥 주소, 확정여부, 배정, 시간, 초청세미나)를 인식합니다. 연락처가 들어 있어 코드에는 포함하지 않습니다.</p>
+  <div class="fg"><div><label>시즌 연도</label><input type="number" id="seY" value="${curY()-1}"></div><div><label>초청세미나 열의 숫자는 몇 월?</label><input type="number" id="seM" min="1" max="12" value="2"></div></div>
+  <p><input type="file" id="seFile" accept=".csv,text/csv"></p>
+  <p><label style="display:flex;gap:6px;color:var(--ink)"><input type="checkbox" id="seAll" checked> 현재 협력사 목록 전체를 이 시즌 "대상"으로 처리 (참석률의 분모). 시트에 없는 업체는 '미신청'이 됩니다</label></p>
+  <div class="row" style="justify-content:flex-end"><button class="btn pri" onclick="doImportSeason()">불러오기</button></div><div id="seRes"></div>`)}
+function doImportSeason(){
+  const f=$('seFile').files[0];if(!f)return alert('CSV 파일을 선택하세요.');
+  const y=+$('seY').value,mo=+$('seM').value||2;if(!(y>2000))return alert('시즌 연도를 확인하세요.');
+  const r=new FileReader();r.onload=()=>{
+    const rows=parseCsv(String(r.result)),hd=(rows.shift()||[]).map(x=>x.trim().replace(/\s+/g,' ')),ix=k=>hd.findIndex(x=>x.startsWith(k));
+    const I={name:ix('시공사명'),phone:ix('연락처'),d1:ix('희망일자 1'),d2:ix('희망일자 2'),d3:ix('희망일자 3'),ppl:ix('참여 예정 인원'),addr:ix('고객사 사옥 주소'),fix:ix('확정여부'),asg:ix('배정'),time:ix('시간'),inv:ix('초청세미나'),memo:ix('메모')};
+    if(I.name<0||I.fix<0)return alert('시공사명/확정여부 열을 찾지 못했습니다. 구글폼 응답 시트의 CSV인지 확인하세요.');
+    const touched=new Set(),rep={rows:0,match:0,created:0,visit:0,invite:0,unconf:0,bad:[]};
+    if($('seAll').checked)S.companies.forEach(c=>{c.hist[y]={...(c.hist[y]||{}),invited:true}});
+    for(const x of rows){const name=(x[I.name]||'').trim();if(!name)continue;rep.rows++;
+      const get=i=>i<0?'':(x[i]||'').trim(),prefs=[get(I.d1),get(I.d2),get(I.d3)].map(parseKDate),addr=get(I.addr);
+      [[get(I.d1),'1순위'],[get(I.d2),'2순위'],[get(I.d3),'3순위']].forEach(([raw,lab],k)=>{if(raw&&!prefs[k])rep.bad.push(name+' · '+lab+' 날짜 '+raw);else if(prefs[k]&&(prefs[k]<(y-1)+'-11-01'||prefs[k]>y+'-03-31'))rep.bad.push(name+' · '+lab+' 날짜 '+raw+' (시즌 범위 밖, 오타 의심)')});
+      let c=S.companies.find(z=>nameKey(z.name)===nameKey(name));
+      if(c)rep.match++;else{c={id:'NS-'+String(S.companies.length+1).padStart(4,'0'),name,city:locOf(addr),address:/[시군구]/.test(addr)&&addr.length>8?addr:'',people:3,contact:'',phone:'',email:'',rep:'',x:false,fixedStaffId:'',replyFlag:'',callChecked:'',memo:'',mail:{sent:false,sentAt:'',replied:false,repliedAt:'',resend:0},prefs:[],hist:{},invite:false,inviteDate:'',note:'목록 외(시트에서 추가)'};S.companies.push(c);rep.created++}
+      if(!c.phone&&get(I.phone))c.phone=get(I.phone);
+      const fx=/확정\s*(\d)/.exec(get(I.fix)),invD=parseInt(get(I.inv),10),h={...(c.hist[y]||{}),invited:true,replied:true,people:parsePeople(get(I.ppl)),prefs:prefs.filter(Boolean),memo:get(I.memo),type:'',rank:null,date:'',staff:'',time:''};
+      if(invD>=1&&invD<=31){h.type='invite';h.date=y+'-'+String(mo).padStart(2,'0')+'-'+String(invD).padStart(2,'0');rep.invite++}
+      else if(fx){h.type='visit';h.rank=+fx[1]-1;h.date=prefs[h.rank]||'';h.staff=get(I.asg);h.time=get(I.time);rep.visit++}
+      else rep.unconf++;
+      c.hist[y]=h;touched.add(c.id);
+    }
+    const nm=(S.companies.length);logit('시즌 '+y+' 이력 불러오기: 시트 '+rep.rows+'곳, 방문 '+rep.visit+', 초청 '+rep.invite+', 미확정 '+rep.unconf);
+    $('seRes').innerHTML=`<div class="notice" style="margin-top:12px"><b>${y}년 이력을 반영했습니다.</b><br>시트 ${rep.rows}곳 · 기존 목록과 일치 ${rep.match}곳 · 목록에 없어 새로 추가 ${rep.created}곳<br>방문 세미나 참석 ${rep.visit}곳 · 초청세미나 참석 ${rep.invite}곳 · 신청했지만 미확정 ${rep.unconf}곳${rep.bad.length?'<br><b>날짜를 읽지 못한 항목 '+rep.bad.length+'건</b> (이력에는 빈 날짜로 저장됨):<br>'+rep.bad.slice(0,12).map(esc).join('<br>')+(rep.bad.length>12?'<br>…':''):''}</div><div class="row" style="justify-content:flex-end"><button class="btn pri" onclick="closeModal();go('stats')">통계 보기</button></div>`;
+    void nm;renderAll();
+  };r.readAsText(f,'utf-8');
+}
+
+S=load();migrate();resnap();renderAll();extInit();if(openCalls().length)showUrgent();sticky().forEach(c=>toast('📞 연락처 없음: '+c.name+' — 입력 전까지 계속 알립니다'));
 </script>
 </body>
 </html>
